@@ -117,6 +117,22 @@ export default function Home() {
   }
   async function handleSignOut() { await supabase.auth.signOut(); setActive("dashboard"); setNotice(""); }
   const createFields: Record<string, { name: string; label: string; type?: string; required?: boolean; options?: { label: string; value: string }[] }[]> = {
+    students: [
+      { name: "id", label: "Profil de l’apprenant", type: "profile", required: true },
+      { name: "student_number", label: "Matricule apprenant", required: true },
+      { name: "formation_id", label: "Formation", type: "formation" },
+      { name: "group_id", label: "Groupe", type: "group" },
+      { name: "enrollment_date", label: "Date d’inscription", type: "date" },
+      { name: "education_level", label: "Niveau d’études" }
+    ],
+    registrations: [
+      { name: "registration_number", label: "Numéro d’inscription", required: true },
+      { name: "person_id", label: "Personne", type: "profile", required: true },
+      { name: "formation_id", label: "Formation", type: "formation" },
+      { name: "group_id", label: "Groupe", type: "group" },
+      { name: "registration_date", label: "Date d’inscription", type: "date", required: true },
+      { name: "status", label: "Statut", type: "select", required: true, options: [{ label: "En attente", value: "pending" }, { label: "Soumise", value: "submitted" }, { label: "Approuvée", value: "approved" }, { label: "Rejetée", value: "rejected" }, { label: "Annulée", value: "cancelled" }] }
+    ],
     groups: [
       { name: "formation_id", label: "Formation", type: "formation", required: true },
       { name: "code", label: "Code du groupe", required: true },
@@ -138,9 +154,15 @@ export default function Home() {
     ]
   };
   const [formationOptions, setFormationOptions] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [groupOptions, setGroupOptions] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [profileOptions, setProfileOptions] = useState<{ id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]>([]);
   useEffect(() => {
-    if (user && ["groups", "subjects"].includes(active)) {
+    if (user && ["students", "groups", "subjects", "registrations"].includes(active)) {
       supabase.from("formations").select("id,name,code").order("name").then(({ data }) => setFormationOptions((data ?? []) as { id: string; name: string; code: string }[]));
+    }
+    if (user && ["students", "registrations"].includes(active)) {
+      supabase.from("groups").select("id,name,code").order("name").then(({ data }) => setGroupOptions((data ?? []) as { id: string; name: string; code: string }[]));
+      supabase.from("profiles").select("id,display_name,first_name,last_name,public_id").order("last_name").limit(300).then(({ data }) => setProfileOptions((data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]));
     }
   }, [user, active]);
 
@@ -151,9 +173,11 @@ export default function Home() {
     const payload: Record<string, unknown> = {};
     for (const field of createFields[active]) {
       const value = (createValues[field.name] ?? "").trim();
-      if (field.type === "number") payload[field.name] = value ? Number(value) : null;
+      if (active === "students" && field.name === "id") payload.id = value;
+      else if (field.type === "number") payload[field.name] = value ? Number(value) : null;
       else payload[field.name] = value || null;
     }
+    if (active === "registrations") { payload.created_by = user?.id; payload.submitted_at = new Date().toISOString(); }
     const { error: insertError } = await supabase.from(active).insert(payload);
     if (insertError) setError(insertError.message);
     else {
@@ -225,7 +249,7 @@ export default function Home() {
           <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"À vérifier"}</span></div></div></div></div>
         </>}
         {active!=="dashboard" && active!=="settings" && <>
-          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{activeModule.description}</p></div>{(["formations","groups","subjects","rooms"].includes(active)&&isAdmin)&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":"＋ Ajouter une salle"}</button>}</div>
+          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{activeModule.description}</p></div>{(["formations","students","registrations","groups","subjects","rooms"].includes(active)&&isAdmin)&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="students"?"＋ Ajouter un dossier":active==="registrations"?"＋ Nouvelle inscription":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":"＋ Ajouter une salle"}</button>}</div>
           {active!=="formations"&&showCreate&&isAdmin&&createFields[active]&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un enregistrement</div><div className="panel-desc">Les données seront enregistrées dans la base existante, selon les autorisations Supabase.</div></div></div><div className="panel-body"><form onSubmit={createModuleRecord}><div className="form-grid">{createFields[active].map(field=><label className="field" key={field.name}>{field.label}{field.type==="formation"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une formation</option>{formationOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:<input type={field.type??"text"} min={field.type==="number"?0:undefined} required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})} placeholder={field.type==="number"?"0":field.label}/>}</label>)}</div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer"}</button></div></form></div></div>}
           {active==="formations"&&showCreate&&isAdmin&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer une formation</div><div className="panel-desc">Les champs code et nom sont obligatoires.</div></div></div><div className="panel-body"><form onSubmit={createFormation}><div className="form-grid"><label className="field">Code de la formation<input required value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})} placeholder="Ex. PILOTAGE-01"/></label><label className="field">Nom de la formation<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Ex. Initiation au pilotage"/></label><label className="field">Durée<input value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})} placeholder="Ex. 6 mois"/></label><label className="field">Description<input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Présentation de la formation"/></label></div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer la formation"}</button></div></form></div></div>}
           <div className="panel"><div className="panel-head"><div><div className="panel-title">{activeModule.label} enregistrés</div><div className="panel-desc">Données affichées selon vos autorisations · maximum 100 lignes</div></div><div className="table-toolbar"><input className="search-box" placeholder="Rechercher dans les résultats…" value={search} onChange={e=>setSearch(e.target.value)}/><button className="btn btn-quiet" onClick={()=>void loadRows(active)}>↻ Actualiser</button></div></div>
