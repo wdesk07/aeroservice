@@ -21,7 +21,7 @@ const modules: ModuleConfig[] = [
   { key: "subjects", label: "Matières", icon: "▤", table: "subjects", columns: ["code", "name", "formation_id", "status"], description: "Matières et unités d’enseignement.", section: "PÉDAGOGIE" },
   { key: "rooms", label: "Salles", icon: "⌂", table: "rooms", columns: ["code", "name", "capacity", "location_description", "status"], description: "Salles et espaces de formation.", section: "ORGANISATION" },
   { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["registration_number", "person_id", "formation_id", "group_id", "registration_date", "status"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
-  { key: "attendance", label: "Présences", icon: "◷", table: "attendance", columns: ["person_id", "person_type", "session_id", "status", "planned_at", "arrived_at", "delay_minutes", "access_blocked"], description: "Pointage et suivi des présences.", section: "ADMINISTRATION" },
+  { key: "attendance", label: "Présences", icon: "◷", table: "attendance", columns: ["person_id", "person_type", "status", "planned_at", "arrived_at", "delay_minutes", "access_blocked", "anomaly_reason"], description: "Pointage et suivi des présences.", section: "ADMINISTRATION" },
   { key: "payments", label: "Paiements", icon: "₣", table: "payments", columns: ["person_id", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Suivi des règlements et frais.", section: "FINANCES" },
   { key: "staff", label: "Personnel", icon: "♙", table: "staff", columns: ["id", "staff_number", "department", "position", "hire_date", "status"], description: "Personnel administratif et opérationnel.", section: "ADMINISTRATION" },
   { key: "roles", label: "Rôles & accès", icon: "⚿", table: "roles", columns: ["code", "name", "description", "is_system"], description: "Rôles disponibles dans la plateforme.", section: "SYSTÈME" },
@@ -56,6 +56,7 @@ export default function Home() {
   const [mobileNav, setMobileNav] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", duration: "", description: "" });
   const [createValues, setCreateValues] = useState<Record<string, string>>({});
+  const [lateForm, setLateForm] = useState({ person_id: "", planned_time: "08:00", arrived_time: "", amount_fcfa: "", method: "cash", provider: "", transaction_reference: "", reason: "" });
 
   const loadIdentity = useCallback(async (current: User) => {
     const [{ data: p }, { data: r }] = await Promise.all([
@@ -160,7 +161,7 @@ export default function Home() {
     if (user && ["students", "groups", "subjects", "registrations"].includes(active)) {
       supabase.from("formations").select("id,name,code").order("name").then(({ data }) => setFormationOptions((data ?? []) as { id: string; name: string; code: string }[]));
     }
-    if (user && ["students", "registrations"].includes(active)) {
+    if (user && ["students", "registrations", "attendance"].includes(active)) {
       supabase.from("groups").select("id,name,code").order("name").then(({ data }) => setGroupOptions((data ?? []) as { id: string; name: string; code: string }[]));
       supabase.from("profiles").select("id,display_name,first_name,last_name,public_id").order("last_name").limit(300).then(({ data }) => setProfileOptions((data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]));
     }
@@ -188,6 +189,65 @@ export default function Home() {
     setBusy(false);
   }
 
+  async function registerLateArrival(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!user || !lateForm.person_id || Number(lateForm.amount_fcfa) <= 0) {
+      setError("Choisissez un apprenant et saisissez un montant payé supérieur à zéro.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    const plannedAt = new Date(`${day}T${lateForm.planned_time}:00`);
+    const arrivedTime = lateForm.arrived_time || `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const arrivedAt = new Date(`${day}T${arrivedTime}:00`);
+    const delayMinutes = Math.max(0, Math.round((arrivedAt.getTime() - plannedAt.getTime()) / 60000));
+    const amount = Math.round(Number(lateForm.amount_fcfa));
+    const note = `Retard ${delayMinutes} min. Montant payé : ${amount.toLocaleString("fr-FR")} FCFA. Accès autorisé par le secrétariat après validation du règlement.${lateForm.reason.trim() ? " Motif : " + lateForm.reason.trim() : ""}`;
+    const attendanceResult = await supabase.from("attendance").insert({
+      person_id: lateForm.person_id, person_type: "student",
+      status: "late", planned_at: plannedAt.toISOString(), arrived_at: arrivedAt.toISOString(),
+      delay_minutes: delayMinutes, access_blocked: true, source: "secretariat",
+      anomaly: true, anomaly_reason: note
+    }).select("id").single();
+    if (attendanceResult.error || !attendanceResult.data) {
+      setError(attendanceResult.error?.message || "Le retard n’a pas pu être enregistré.");
+      setBusy(false); return;
+    }
+    const penaltyResult = await supabase.from("penalties").insert({
+      attendance_id: attendanceResult.data.id, person_id: lateForm.person_id,
+      amount_fcfa: amount, status: "paid"
+    }).select("id").single();
+    if (penaltyResult.error || !penaltyResult.data) {
+      setError("Le retard est enregistré, mais le dossier de règlement n’a pas pu être créé. L’accès reste bloqué. Détail : " + (penaltyResult.error?.message || "erreur inconnue"));
+      await loadRows("attendance"); setBusy(false); return;
+    }
+    const paymentResult = await supabase.from("payments").insert({
+      penalty_id: penaltyResult.data.id, person_id: lateForm.person_id,
+      amount_fcfa: amount, method: lateForm.method,
+      provider: lateForm.provider.trim() || null,
+      transaction_reference: lateForm.transaction_reference.trim() || null,
+      status: "validated", received_at: arrivedAt.toISOString(), received_by: user.id,
+      validated_at: new Date().toISOString(), validated_by: user.id
+    });
+    if (paymentResult.error) {
+      await supabase.from("penalties").update({ status: "pending" }).eq("id", penaltyResult.data.id);
+      setError("Le retard et le montant sont enregistrés, mais la validation du paiement a échoué. L’accès reste bloqué. Détail : " + paymentResult.error.message);
+      await loadRows("attendance"); setBusy(false); return;
+    }
+    const accessResult = await supabase.from("attendance").update({
+      status: "regularized_late", access_blocked: false,
+      anomaly_reason: note + " Paiement validé. Accès autorisé."
+    }).eq("id", attendanceResult.data.id);
+    if (accessResult.error) {
+      setError("Le paiement est validé, mais la mise à jour de l’autorisation d’accès a échoué. Prévenez l’administration. Détail : " + accessResult.error.message);
+    } else {
+      setNotice(`Retard enregistré : ${delayMinutes} minute(s). Paiement de ${amount.toLocaleString("fr-FR")} FCFA validé. Accès autorisé — dossier affiché en jaune.`);
+      setLateForm({ person_id: "", planned_time: "08:00", arrived_time: "", amount_fcfa: "", method: "cash", provider: "", transaction_reference: "", reason: "" });
+    }
+    await loadRows("attendance"); await loadCounts(); setBusy(false);
+  }
+
   async function createFormation(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
     const { error: insertError } = await supabase.from("formations").insert({ code: form.code.trim(), name: form.name.trim(), duration: form.duration.trim() || null, description: form.description.trim() || null });
@@ -204,6 +264,7 @@ export default function Home() {
     return rows.filter(row => Object.values(row).some(value => String(value ?? "").toLowerCase().includes(q)));
   }, [rows, search]);
   const isAdmin = roles.some(r => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
+  const isSecretary = roles.some(r => ["SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
 
   if (!user) return <main className="login-screen">
     <section className="login-visual">
@@ -249,7 +310,8 @@ export default function Home() {
           <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"À vérifier"}</span></div></div></div></div>
         </>}
         {active!=="dashboard" && active!=="settings" && <>
-          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{activeModule.description}</p></div>{(["formations","students","registrations","groups","subjects","rooms"].includes(active)&&isAdmin)&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="students"?"＋ Ajouter un dossier":active==="registrations"?"＋ Nouvelle inscription":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":"＋ Ajouter une salle"}</button>}</div>
+          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{active === "attendance" ? "Enregistrez le retard, validez le montant payé et autorisez l’accès à l’apprenant." : activeModule.description}</p></div>{(["formations","students","registrations","groups","subjects","rooms"].includes(active)&&isAdmin)&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="students"?"＋ Ajouter un dossier":active==="registrations"?"＋ Nouvelle inscription":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":"＋ Ajouter une salle"}</button>}</div>
+          {active === "attendance" && isSecretary && <div className="panel late-panel"><div className="panel-head"><div><div className="panel-title">Retard et autorisation d’accès</div><div className="panel-desc">Le paiement est validé avant d’ouvrir l’accès. L’administration pourra consulter l’opération.</div></div><span className="pill late-status">● Validation secrétaire</span></div><div className="panel-body"><form onSubmit={registerLateArrival}><div className="form-grid"><label className="field">Apprenant<select required value={lateForm.person_id} onChange={e=>setLateForm({...lateForm,person_id:e.target.value})}><option value="">Rechercher / choisir un apprenant</option>{profileOptions.map(item=><option key={item.id} value={item.id}>{item.public_id ? item.public_id + " — " : ""}{item.display_name||[item.first_name,item.last_name].filter(Boolean).join(" ")||item.id}</option>)}</select></label><label className="field">Heure normale d’arrivée<input type="time" required value={lateForm.planned_time} onChange={e=>setLateForm({...lateForm,planned_time:e.target.value})}/></label><label className="field">Heure d’arrivée constatée<input type="time" value={lateForm.arrived_time} onChange={e=>setLateForm({...lateForm,arrived_time:e.target.value})} /></label><label className="field">Montant payé (FCFA)<input type="number" min="1" step="1" required value={lateForm.amount_fcfa} onChange={e=>setLateForm({...lateForm,amount_fcfa:e.target.value})} placeholder="Ex. 1000"/></label><label className="field">Mode de paiement<select required value={lateForm.method} onChange={e=>setLateForm({...lateForm,method:e.target.value})}><option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="other">Autre</option></select></label><label className="field">Opérateur (facultatif)<input value={lateForm.provider} onChange={e=>setLateForm({...lateForm,provider:e.target.value})} placeholder="Ex. MTN, Moov…"/></label><label className="field">Référence du paiement (facultatif)<input value={lateForm.transaction_reference} onChange={e=>setLateForm({...lateForm,transaction_reference:e.target.value})} placeholder="Référence ou numéro de reçu"/></label><label className="field">Motif / observation (facultatif)<input value={lateForm.reason} onChange={e=>setLateForm({...lateForm,reason:e.target.value})} placeholder="Ex. transport, circulation…"/></label></div><div className="late-preview"><span className="late-dot"></span><div><strong>Après validation réussie</strong><p>Le statut devient « Retard régularisé », la ligne apparaît en jaune et l’accès est autorisé. Le montant est conservé dans le suivi des paiements.</p></div></div><div className="form-actions"><button type="button" className="btn" onClick={()=>setLateForm({person_id:"",planned_time:"08:00",arrived_time:"",amount_fcfa:"",method:"cash",provider:"",transaction_reference:"",reason:""})}>Effacer</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Validation en cours…":"Valider le paiement et autoriser l’accès"}</button></div></form></div></div>}
           {active!=="formations"&&showCreate&&isAdmin&&createFields[active]&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un enregistrement</div><div className="panel-desc">Les données seront enregistrées dans la base existante, selon les autorisations Supabase.</div></div></div><div className="panel-body"><form onSubmit={createModuleRecord}><div className="form-grid">{createFields[active].map(field=><label className="field" key={field.name}>{field.label}{field.type==="formation"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une formation</option>{formationOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:field.type==="group"?<select value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir un groupe</option>{groupOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:field.type==="profile"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une personne</option>{profileOptions.map(item=><option key={item.id} value={item.id}>{item.display_name||[item.first_name,item.last_name].filter(Boolean).join(" ")||item.public_id||item.id}</option>)}</select>:field.type==="select"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir…</option>{field.options?.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select>:<input type={field.type??"text"} min={field.type==="number"?0:undefined} required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})} placeholder={field.type==="number"?"0":field.label}/>}</label>)}</div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer"}</button></div></form></div></div>}
           {active==="formations"&&showCreate&&isAdmin&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer une formation</div><div className="panel-desc">Les champs code et nom sont obligatoires.</div></div></div><div className="panel-body"><form onSubmit={createFormation}><div className="form-grid"><label className="field">Code de la formation<input required value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})} placeholder="Ex. PILOTAGE-01"/></label><label className="field">Nom de la formation<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Ex. Initiation au pilotage"/></label><label className="field">Durée<input value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})} placeholder="Ex. 6 mois"/></label><label className="field">Description<input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Présentation de la formation"/></label></div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer la formation"}</button></div></form></div></div>}
           <div className="panel"><div className="panel-head"><div><div className="panel-title">{activeModule.label} enregistrés</div><div className="panel-desc">Données affichées selon vos autorisations · maximum 100 lignes</div></div><div className="table-toolbar"><input className="search-box" placeholder="Rechercher dans les résultats…" value={search} onChange={e=>setSearch(e.target.value)}/><button className="btn btn-quiet" onClick={()=>void loadRows(active)}>↻ Actualiser</button></div></div>
