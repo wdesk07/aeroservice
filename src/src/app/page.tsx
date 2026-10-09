@@ -336,20 +336,22 @@ export default function Home() {
         setError("L’inscription est approuvée, mais le compte n’a pas été activé. " + (profileError?.message || "Le profil apprenant n’a pas été mis à jour. Vérifiez les droits du secrétariat dans Supabase."));
         await loadRows("registrations"); setBusy(false); return;
       }
+      let secondaryIssue = "";
       const { data: existingStudent, error: lookupStudentError } = await supabase.from("students").select("id").eq("id", personId).maybeSingle();
       if (lookupStudentError) {
-        setError("Compte activé, mais impossible de vérifier le dossier apprenant : " + lookupStudentError.message);
+        secondaryIssue = "Compte activé, mais impossible de vérifier le dossier apprenant : " + lookupStudentError.message;
+        setError(secondaryIssue);
       } else if (!existingStudent) {
         const studentNumber = "AS-" + new Date().getFullYear() + "-" + personId.replace(/-/g, "").slice(0, 8).toUpperCase();
         const { error: studentError } = await supabase.from("students").insert({ id: personId, student_number: studentNumber, formation_id: registration.formation_id || null, group_id: registration.group_id || null, enrollment_date: new Date().toISOString().slice(0,10) });
-        if (studentError) setError("Compte activé, mais le dossier apprenant n’a pas été créé automatiquement. " + studentError.message);
+        if (studentError) { secondaryIssue = "Compte activé, mais le dossier apprenant n’a pas été créé automatiquement. " + studentError.message; setError(secondaryIssue); }
       }
       if (!updatedProfile || updatedProfile.status !== "active") {
         setError("La demande a été enregistrée, mais le statut actif du compte n’a pas été confirmé.");
-      } else if (!error) {
+      } else if (!secondaryIssue) {
         setNotice("VALIDATION CONFIRMÉE : inscription approuvée et compte apprenant activé. L’apprenant peut maintenant se connecter.");
       } else {
-        setNotice("Inscription approuvée et compte activé. Attention : " + error);
+        setNotice("Inscription approuvée et compte activé. Attention : " + secondaryIssue);
       }
     } else {
       setNotice("Demande d’inscription rejetée et décision enregistrée.");
