@@ -83,7 +83,7 @@ export default function Home() {
     if (result.error) {
       setRows([]);
       setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
-    } else setRows((result.data ?? []) as Record<string, unknown>[]);
+    } else setRows((result.data ?? []) as unknown as Record<string, unknown>[]);
     setLoading(false);
   }, []);
 
