@@ -37,6 +37,33 @@ const pretty = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpp
 const statusClass = (v: string) => ["active", "approved", "success", "validated", "present", "paid"].includes(v.toLowerCase()) ? "active" : ["pending", "submitted", "pre_review"].includes(v.toLowerCase()) ? "pending" : ["late", "regularized_late"].includes(v.toLowerCase()) ? "late" : ["suspended", "rejected", "inactive", "absent"].includes(v.toLowerCase()) ? "rejected" : "";
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]?.toUpperCase()).join("") || "AS";
 
+const roleModules: Record<string, ModuleKey[]> = {
+  DIRECTOR: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","payments","staff","roles","settings"],
+  ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","payments","staff","roles","settings"],
+  PRE_ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","payments","staff","roles","settings"],
+  SECRETARY: ["dashboard","students","registrations","attendance","payments","settings"],
+  SECRETARIAT: ["dashboard","students","registrations","attendance","payments","settings"],
+  SECRETAIRE: ["dashboard","students","registrations","attendance","payments","settings"],
+  "SECRÉTAIRE": ["dashboard","students","registrations","attendance","payments","settings"],
+  PEDAGOGY: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
+  PEDAGOGIE: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
+  TEACHER: ["dashboard","groups","subjects","attendance","formations","settings"],
+  ENSEIGNANT: ["dashboard","groups","subjects","attendance","formations","settings"],
+  STAFF: ["dashboard","attendance","settings"],
+  PERSONNEL: ["dashboard","attendance","settings"],
+  ACCOUNTING: ["dashboard","payments","settings"],
+  FINANCE: ["dashboard","payments","settings"],
+  TRAVEL_AGENT: ["dashboard","formations","settings"],
+  STUDENT: ["dashboard","settings"],
+  APPRENANT: ["dashboard","settings"]
+};
+const canAccessModule = (key: ModuleKey, roleCodes: string[]) => {
+  const normalized = roleCodes.map(code => code.toUpperCase());
+  if (normalized.some(code => ["DIRECTOR","ADMIN","PRE_ADMIN"].includes(code))) return true;
+  return normalized.some(code => (roleModules[code] ?? ["dashboard","settings"]).includes(key));
+};
+
+
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -83,6 +110,9 @@ export default function Home() {
   }, []);
 
   const loadRows = useCallback(async (key: ModuleKey) => {
+    if (!canAccessModule(key, roles.map(role => role.code))) {
+      setRows([]); setError("Accès refusé : ce module n’est pas autorisé pour votre rôle."); setLoading(false); return;
+    }
     const config = modules.find(m => m.key === key);
     if (!config?.table) { setRows([]); return; }
     setLoading(true); setError("");
@@ -93,7 +123,7 @@ export default function Home() {
       setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
     } else setRows((result.data ?? []) as unknown as Record<string, unknown>[]);
     setLoading(false);
-  }, []);
+  }, [roles]);
 
   useEffect(() => {
     let mounted = true;
@@ -108,7 +138,15 @@ export default function Home() {
     void loadCounts();
   }, [user, loadIdentity, loadCounts]);
 
-  useEffect(() => { if (user && active !== "dashboard" && active !== "settings") void loadRows(active); }, [user, active, loadRows]);
+  useEffect(() => {
+    if (!user) return;
+    if (!canAccessModule(active, roles.map(role => role.code))) {
+      setActive("dashboard"); setRows([]); setShowCreate(false);
+      setError("Le menu demandé n’est pas autorisé pour votre rôle. Vous avez été redirigé vers votre espace.");
+      return;
+    }
+    if (active !== "dashboard" && active !== "settings") void loadRows(active);
+  }, [user, active, roles, loadRows]);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
@@ -376,6 +414,10 @@ export default function Home() {
   }, [rows, search]);
   const isAdmin = roles.some(r => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
   const isSecretary = roles.some(r => ["SECRETARY", "SECRETARIAT", "SECRETAIRE", "SECRÉTAIRE", "DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
+  const roleCodes = roles.map(r => r.code.toUpperCase());
+  const visibleModules = modules.filter(m => canAccessModule(m.key, roleCodes));
+  const isLearner = roleCodes.some(code => ["STUDENT","APPRENANT"].includes(code));
+  const roleLabel = isAdmin ? "Direction / Administration" : isSecretary ? "Secrétariat" : roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE"].includes(code)) ? "Pédagogie" : roleCodes.some(code => ["TEACHER","ENSEIGNANT"].includes(code)) ? "Enseignant" : roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) ? "Comptabilité / Finance" : roleCodes.some(code => ["STAFF","PERSONNEL"].includes(code)) ? "Personnel" : isLearner ? "Apprenant" : "Accès à définir";
 
   useEffect(() => {
     if (mode !== "signup") return;
@@ -423,7 +465,7 @@ export default function Home() {
   return <div className="app-shell">
     <aside className={"sidebar" + (mobileNav ? " mobile-open" : "")}>
       <div className="brand"><div className="brand-mark">✈</div><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Gestion & formation</div></div></div>
-      {["PILOTAGE","PÉDAGOGIE","ORGANISATION","ADMINISTRATION","FINANCES","SYSTÈME"].map(section => <div key={section}><div className="nav-label">{section}</div>{modules.filter(m=>m.section===section).map(m=><button key={m.key} className={"nav-item"+(active===m.key?" active":"")} onClick={()=>{setActive(m.key);setSearch("");setShowCreate(false);setMobileNav(false);setNotice("");setError("");}}><span className="nav-icon">{m.icon}</span>{m.label}</button>)}</div>)}
+      {["PILOTAGE","PÉDAGOGIE","ORGANISATION","ADMINISTRATION","FINANCES","SYSTÈME"].map(section => visibleModules.some(m=>m.section===section) ? <div key={section}><div className="nav-label">{section}</div>{visibleModules.filter(m=>m.section===section).map(m=><button key={m.key} className={"nav-item"+(active===m.key?" active":"")} onClick={()=>{setActive(m.key);setSearch("");setShowCreate(false);setMobileNav(false);setNotice("");setError("");}}><span className="nav-icon">{m.icon}</span>{m.label}</button>)}</div> : null)}
       <div className="sidebar-bottom"><div className="sidebar-note">Espace de travail sécurisé<br/>Aéro Service · Gestion intégrée</div></div>
     </aside>
     <section className="main-area">
@@ -431,16 +473,17 @@ export default function Home() {
       <main className="content">
         {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
         {active==="dashboard" && <>
-          <div className="page-heading"><div><div className="eyebrow">TABLEAU DE BORD</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">Voici l’état de votre espace de gestion aujourd’hui.</p></div><button className="btn btn-primary" onClick={()=>{setActive("formations");setShowCreate(true);}}>＋ Nouvelle formation</button></div>
-          <div className="stats-grid">{metrics.map((metric,i)=><div className="stat-card" key={metric.table}><div className="stat-top"><span>{metric.label}</span><span className="stat-icon">{metric.icon}</span></div><div className="stat-number">{counts[metric.table]===undefined?"…":counts[metric.table]===null?"—":counts[metric.table]}</div><div className="stat-foot">{metric.foot}</div></div>)}</div>
-          <div className="panel"><div className="panel-head"><div><div className="panel-title">Accès rapide</div><div className="panel-desc">Retrouvez les espaces de travail les plus utilisés.</div></div></div><div className="panel-body"><div className="quick-grid">{[
+          <div className="page-heading"><div><div className="eyebrow">ESPACE PERSONNEL · {roleLabel.toUpperCase()}</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">{isAdmin ? "Vue globale de l’établissement et accès aux fonctions administratives." : isSecretary ? "Espace secrétariat : inscriptions, suivi des paiements et validation des accès apprenants." : isLearner ? "Votre espace apprenant personnel." : "Retrouvez les outils correspondant à votre fonction."}</p></div>{isAdmin && <button className="btn btn-primary" onClick={()=>{setActive("formations");setShowCreate(true);}}>＋ Nouvelle formation</button>}</div>
+          {!isLearner && (isAdmin || isSecretary || roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE","ACCOUNTING","FINANCE"].includes(code))) && <div className="stats-grid">{metrics.map((metric,i)=><div className="stat-card" key={metric.table}><div className="stat-top"><span>{metric.label}</span><span className="stat-icon">{metric.icon}</span></div><div className="stat-number">{counts[metric.table]===undefined?"…":counts[metric.table]===null?"—":counts[metric.table]}</div><div className="stat-foot">{metric.foot}</div></div>)}</div>}
+          {!isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Accès rapide</div><div className="panel-desc">Retrouvez les espaces de travail les plus utilisés.</div></div></div><div className="panel-body"><div className="quick-grid">{[
             {key:"students" as ModuleKey,icon:"♙",title:"Gérer les apprenants",desc:"Consulter les dossiers et parcours"},
             {key:"formations" as ModuleKey,icon:"✈",title:"Catalogue des formations",desc:"Organiser l’offre pédagogique"},
             {key:"registrations" as ModuleKey,icon:"▣",title:"Suivre les inscriptions",desc:"Voir les demandes enregistrées"},
             {key:"attendance" as ModuleKey,icon:"◷",title:"Présences & pointage",desc:"Consulter les feuilles de présence"},
             {key:"payments" as ModuleKey,icon:"₣",title:"Suivi des paiements",desc:"Consulter les règlements"},
             {key:"roles" as ModuleKey,icon:"⚿",title:"Rôles & autorisations",desc:"Consulter les rôles configurés"}
-          ].map(q=><button className="quick-action" key={q.key} onClick={()=>{setActive(q.key);setSearch("");setError("");}}><span className="quick-icon">{q.icon}</span><span><div className="quick-title">{q.title}</div><div className="quick-desc">{q.desc}</div></span><span style={{marginLeft:"auto",color:"#9aa8b8"}}>→</span></button>)}</div></div></div>
+          ].map(q=><button className="quick-action" key={q.key} onClick={()=>{setActive(q.key);setSearch("");setError("");}}><span className="quick-icon">{q.icon}</span><span><div className="quick-title">{q.title}</div><div className="quick-desc">{q.desc}</div></span><span style={{marginLeft:"auto",color:"#9aa8b8"}}>→</span></button>)}</div></div></div>}
+          {isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre espace apprenant</div><div className="panel-desc">Bienvenue dans votre espace personnel. Les informations pédagogiques et votre suivi doivent être consultés depuis les rubriques qui vous sont autorisées.</div></div></div><div className="panel-body">Votre rôle actuel : <strong>Apprenant</strong>. Les fonctions de gestion, les dossiers d’autres apprenants, le personnel et les paramètres administratifs ne sont pas accessibles depuis ce compte.</div></div>}
           <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"À vérifier"}</span></div></div></div></div>
         </>}
         {active!=="dashboard" && active!=="settings" && <>
