@@ -348,7 +348,23 @@ export default function Home() {
   const isSecretary = roles.some(r => ["SECRETARY", "SECRETARIAT", "SECRETAIRE", "SECRÉTAIRE", "DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
 
   useEffect(() => {
-    if (mode === "signup") supabase.from("formations").select("id,name,code").eq("status","active").order("name").then(({data,error}) => { if (error) { setPublicFormations([]); setError("Impossible de charger les formations. Veuillez réessayer ou contacter le secrétariat."); } else setPublicFormations((data ?? []) as {id:string;name:string;code:string}[]); });
+    if (mode !== "signup") return;
+    let cancelled = false;
+    setError("");
+    supabase.from("formations").select("id,name,code").eq("status", "active").then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) {
+        setPublicFormations([]);
+        setError("Impossible de charger les formations depuis le catalogue. Actualisez la page ou contactez le secrétariat.");
+        return;
+      }
+      const priority: Record<string, number> = { PNC: 0, AGENT_ESCALE: 1, AGENT_BILLETTERIE: 2, AGENT_VOYAGE: 3 };
+      const options = ((data ?? []) as { id: string; name: string; code: string }[])
+        .sort((a, b) => (priority[a.code] ?? 99) - (priority[b.code] ?? 99) || a.name.localeCompare(b.name));
+      setPublicFormations(options);
+      if (options.length === 0) setError("Aucune formation active n’est disponible. Veuillez contacter le secrétariat.");
+    });
+    return () => { cancelled = true; };
   }, [mode]);
 
   if (!user) return <main className="login-screen">
