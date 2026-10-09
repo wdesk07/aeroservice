@@ -44,7 +44,11 @@ export default function Home() {
   const [active, setActive] = useState<ModuleKey>("dashboard");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "reset">("login");
+  const [mode, setMode] = useState<"login" | "reset" | "signup">("login");
+  const [signupName, setSignupName] = useState("");
+  const [signupPhone, setSignupPhone] = useState("");
+  const [signupFormation, setSignupFormation] = useState("");
+  const [publicFormations, setPublicFormations] = useState<{id:string;name:string;code:string}[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -109,6 +113,30 @@ export default function Home() {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
     const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (authError) setError(authError.message);
+    setBusy(false);
+  }
+  async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setBusy(true); setError(""); setNotice("");
+    const parts = signupName.trim().split(/\\s+/);
+    if (parts.length < 2) { setError("Veuillez saisir votre nom et votre prénom."); setBusy(false); return; }
+    const { data, error: signupError } = await supabase.auth.signUp({
+      email: email.trim(), password,
+      options: { data: { display_name: signupName.trim(), first_name: parts.slice(0, -1).join(" "), last_name: parts[parts.length - 1], phone: signupPhone.trim(), requested_role: "STUDENT" } }
+    });
+    if (signupError || !data.user) { setError(signupError?.message || "Création du compte impossible."); setBusy(false); return; }
+    const registrationNumber = "AS-" + new Date().getFullYear() + "-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+    const { error: registrationError } = await supabase.from("registrations").insert({
+      registration_number: registrationNumber, person_id: data.user.id,
+      formation_id: signupFormation || null, registration_date: new Date().toISOString().slice(0, 10),
+      status: "pending", admission_source: "public_signup", submitted_at: new Date().toISOString(), notes: signupPhone.trim() ? "Téléphone : " + signupPhone.trim() : null
+    });
+    await supabase.auth.signOut();
+    if (registrationError) {
+      setError("Le compte a été créé, mais la demande d’inscription n’a pas pu être enregistrée. Contactez le secrétariat pour finaliser votre dossier. Détail : " + registrationError.message);
+    } else {
+      setNotice("Votre compte a été créé et votre demande envoyée au secrétariat. Vous pourrez vous connecter après validation de votre dossier. Si un e-mail de confirmation est demandé, veuillez d’abord confirmer votre adresse.");
+      setMode("login"); setPassword(""); setSignupName(""); setSignupPhone(""); setSignupFormation("");
+    }
     setBusy(false);
   }
   async function handleReset(e: React.FormEvent<HTMLFormElement>) {
@@ -275,6 +303,10 @@ export default function Home() {
   const isAdmin = roles.some(r => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
   const isSecretary = roles.some(r => ["SECRETARY", "SECRETARIAT", "SECRETAIRE", "SECRÉTAIRE", "DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
 
+  useEffect(() => {
+    if (mode === "signup") supabase.from("formations").select("id,name,code").order("name").then(({data}) => setPublicFormations((data ?? []) as {id:string;name:string;code:string}[]));
+  }, [mode]);
+
   if (!user) return <main className="login-screen">
     <section className="login-visual">
       <div className="brand"><div className="brand-mark">✈</div><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Plateforme de gestion</div></div></div>
@@ -283,14 +315,17 @@ export default function Home() {
     </section>
     <section className="login-form-side"><div className="login-card">
       <div className="brand" style={{padding:"0 0 30px"}}><div className="brand-mark" style={{background:"#eaf2ff",color:"#2474e5"}}>✈</div><div><div className="brand-name" style={{color:"#10243b"}}>AÉRO SERVICE</div><div className="brand-sub" style={{color:"#758396"}}>ESPACE DE CONNEXION</div></div></div>
-      <h2>{mode === "login" ? "Bon retour parmi nous" : "Réinitialiser le mot de passe"}</h2><p>{mode === "login" ? "Connectez-vous pour accéder à votre espace de travail." : "Recevez un lien sécurisé par e-mail."}</p>
+      <h2>{mode === "login" ? "Bon retour parmi nous" : mode === "signup" ? "Créer un compte apprenant" : "Réinitialiser le mot de passe"}</h2><p>{mode === "login" ? "Connectez-vous pour accéder à votre espace de travail." : mode === "signup" ? "Inscrivez-vous à une formation Aéro Service. Votre dossier sera vérifié par le secrétariat." : "Recevez un lien sécurisé par e-mail."}</p>
       {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
-      <form className="login-fields" onSubmit={mode === "login" ? handleLogin : handleReset}>
+      <form className="login-fields" onSubmit={mode === "login" ? handleLogin : mode === "signup" ? handleSignup : handleReset}>
+        {mode === "signup" && <><label className="field">Nom et prénom<input type="text" autoComplete="name" required value={signupName} onChange={e=>setSignupName(e.target.value)} placeholder="Ex. Aïcha Dossou"/></label><label className="field">Téléphone<input type="tel" autoComplete="tel" value={signupPhone} onChange={e=>setSignupPhone(e.target.value)} placeholder="Ex. 01 90 00 00 00"/></label><label className="field">Formation souhaitée<select required value={signupFormation} onChange={e=>setSignupFormation(e.target.value)}><option value="">Choisir une formation</option>{publicFormations.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label></>}
         <label className="field">Adresse e-mail<input type="email" autoComplete="email" placeholder="vous@exemple.com" required value={email} onChange={e=>setEmail(e.target.value)} /></label>
-        {mode === "login" && <label className="field">Mot de passe<input type="password" autoComplete="current-password" placeholder="Votre mot de passe" required value={password} onChange={e=>setPassword(e.target.value)} /></label>}
-        <button className="btn btn-primary" style={{width:"100%",padding:13,marginTop:4}} disabled={busy}>{busy ? "Veuillez patienter…" : mode === "login" ? "Se connecter  →" : "Envoyer le lien"}</button>
+        {mode !== "reset" && <label className="field">Mot de passe<input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={8} placeholder="8 caractères minimum" required value={password} onChange={e=>setPassword(e.target.value)} /></label>}
+        <button className="btn btn-primary" style={{width:"100%",padding:13,marginTop:4}} disabled={busy}>{busy ? "Veuillez patienter…" : mode === "login" ? "Se connecter  →" : mode === "signup" ? "Créer mon compte et envoyer la demande" : "Envoyer le lien"}</button>
       </form>
       <button className="link-btn" onClick={()=>{setMode(mode==="login"?"reset":"login");setError("");setNotice("");}}>{mode==="login"?"Mot de passe oublié ?":"← Retour à la connexion"}</button>
+      {mode === "login" && <button className="link-btn" onClick={()=>{setMode("signup");setError("");setNotice("");setPassword("");}}>Créer un compte apprenant</button>}
+      {mode === "signup" && <button className="link-btn" onClick={()=>{setMode("login");setError("");setNotice("");setPassword("");}}>← Retour à la connexion</button>}
       <div className="login-foot">La connexion est sécurisée par Supabase Auth.<br/>L’accès aux données dépend de votre rôle et des règles de sécurité.</div>
     </div></section>
   </main>;
