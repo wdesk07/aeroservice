@@ -15,15 +15,15 @@ type ModuleConfig = { key: ModuleKey; label: string; icon: string; table?: strin
 const modules: ModuleConfig[] = [
   { key: "dashboard", label: "Vue d’ensemble", icon: "⌂", description: "Les indicateurs essentiels de votre établissement.", section: "PILOTAGE" },
   { key: "students", label: "Apprenants", icon: "♙", table: "students", columns: ["student_number", "formation_id", "group_id", "enrollment_date", "education_level"], description: "Suivi des apprenants et de leurs parcours.", section: "PÉDAGOGIE" },
-  { key: "teachers", label: "Formateurs", icon: "♧", table: "teachers", columns: ["id", "specialty", "status"], description: "Équipe pédagogique et affectations.", section: "PÉDAGOGIE" },
+  { key: "teachers", label: "Formateurs", icon: "♧", table: "teachers", columns: ["id", "teacher_number", "specialization", "hire_date", "status"], description: "Équipe pédagogique et affectations.", section: "PÉDAGOGIE" },
   { key: "formations", label: "Formations", icon: "✈", table: "formations", columns: ["code", "name", "duration", "status", "created_at"], description: "Catalogue des formations proposées.", section: "PÉDAGOGIE" },
   { key: "groups", label: "Groupes", icon: "▦", table: "groups", columns: ["code", "name", "academic_year", "capacity", "status"], description: "Organisation des groupes et promotions.", section: "PÉDAGOGIE" },
   { key: "subjects", label: "Matières", icon: "▤", table: "subjects", columns: ["code", "name", "formation_id", "status"], description: "Matières et unités d’enseignement.", section: "PÉDAGOGIE" },
   { key: "rooms", label: "Salles", icon: "⌂", table: "rooms", columns: ["code", "name", "capacity", "location_description", "status"], description: "Salles et espaces de formation.", section: "ORGANISATION" },
-  { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["registration_number", "person_id", "formation_id", "registration_date", "status"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
-  { key: "attendance", label: "Présences", icon: "◷", table: "attendance", columns: ["person_id", "session_id", "status", "check_in_at", "check_out_at"], description: "Pointage et suivi des présences.", section: "ADMINISTRATION" },
-  { key: "payments", label: "Paiements", icon: "₣", table: "payments", columns: ["person_id", "amount", "currency", "payment_method", "status", "created_at"], description: "Suivi des règlements et frais.", section: "FINANCES" },
-  { key: "staff", label: "Personnel", icon: "♙", table: "staff", columns: ["id", "department", "position", "status"], description: "Personnel administratif et opérationnel.", section: "ADMINISTRATION" },
+  { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["registration_number", "person_id", "formation_id", "group_id", "registration_date", "status"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
+  { key: "attendance", label: "Présences", icon: "◷", table: "attendance", columns: ["person_id", "person_type", "session_id", "status", "planned_at", "arrived_at", "delay_minutes", "access_blocked"], description: "Pointage et suivi des présences.", section: "ADMINISTRATION" },
+  { key: "payments", label: "Paiements", icon: "₣", table: "payments", columns: ["person_id", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Suivi des règlements et frais.", section: "FINANCES" },
+  { key: "staff", label: "Personnel", icon: "♙", table: "staff", columns: ["id", "staff_number", "department", "position", "hire_date", "status"], description: "Personnel administratif et opérationnel.", section: "ADMINISTRATION" },
   { key: "roles", label: "Rôles & accès", icon: "⚿", table: "roles", columns: ["code", "name", "description", "is_system"], description: "Rôles disponibles dans la plateforme.", section: "SYSTÈME" },
   { key: "settings", label: "Paramètres", icon: "⚙", description: "Profil et préférences de session.", section: "SYSTÈME" }
 ];
@@ -55,6 +55,7 @@ export default function Home() {
   const [showCreate, setShowCreate] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", duration: "", description: "" });
+  const [createValues, setCreateValues] = useState<Record<string, string>>({});
 
   const loadIdentity = useCallback(async (current: User) => {
     const [{ data: p }, { data: r }] = await Promise.all([
@@ -115,6 +116,54 @@ export default function Home() {
     setBusy(false);
   }
   async function handleSignOut() { await supabase.auth.signOut(); setActive("dashboard"); setNotice(""); }
+  const createFields: Record<string, { name: string; label: string; type?: string; required?: boolean; options?: { label: string; value: string }[] }[]> = {
+    groups: [
+      { name: "formation_id", label: "Formation", type: "formation", required: true },
+      { name: "code", label: "Code du groupe", required: true },
+      { name: "name", label: "Nom du groupe", required: true },
+      { name: "academic_year", label: "Année académique", required: true },
+      { name: "capacity", label: "Capacité", type: "number" }
+    ],
+    subjects: [
+      { name: "code", label: "Code de la matière", required: true },
+      { name: "name", label: "Nom de la matière", required: true },
+      { name: "formation_id", label: "Formation", type: "formation" },
+      { name: "description", label: "Description" }
+    ],
+    rooms: [
+      { name: "code", label: "Code de la salle", required: true },
+      { name: "name", label: "Nom de la salle", required: true },
+      { name: "capacity", label: "Capacité", type: "number" },
+      { name: "location_description", label: "Emplacement" }
+    ]
+  };
+  const [formationOptions, setFormationOptions] = useState<{ id: string; name: string; code: string }[]>([]);
+  useEffect(() => {
+    if (user && ["groups", "subjects"].includes(active)) {
+      supabase.from("formations").select("id,name,code").order("name").then(({ data }) => setFormationOptions((data ?? []) as { id: string; name: string; code: string }[]));
+    }
+  }, [user, active]);
+
+  async function createModuleRecord(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!isAdmin || !createFields[active]) return;
+    setBusy(true); setError(""); setNotice("");
+    const payload: Record<string, unknown> = {};
+    for (const field of createFields[active]) {
+      const value = (createValues[field.name] ?? "").trim();
+      if (field.type === "number") payload[field.name] = value ? Number(value) : null;
+      else payload[field.name] = value || null;
+    }
+    const { error: insertError } = await supabase.from(active).insert(payload);
+    if (insertError) setError(insertError.message);
+    else {
+      setNotice("Enregistrement créé avec succès.");
+      setCreateValues({}); setShowCreate(false);
+      await loadRows(active); await loadCounts();
+    }
+    setBusy(false);
+  }
+
   async function createFormation(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
     const { error: insertError } = await supabase.from("formations").insert({ code: form.code.trim(), name: form.name.trim(), duration: form.duration.trim() || null, description: form.description.trim() || null });
@@ -176,7 +225,8 @@ export default function Home() {
           <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"À vérifier"}</span></div></div></div></div>
         </>}
         {active!=="dashboard" && active!=="settings" && <>
-          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{activeModule.description}</p></div>{active==="formations"&&isAdmin&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":"＋ Ajouter une formation"}</button>}</div>
+          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{activeModule.description}</p></div>{(["formations","groups","subjects","rooms"].includes(active)&&isAdmin)&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":"＋ Ajouter une salle"}</button>}</div>
+          {active!=="formations"&&showCreate&&isAdmin&&createFields[active]&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un enregistrement</div><div className="panel-desc">Les données seront enregistrées dans la base existante, selon les autorisations Supabase.</div></div></div><div className="panel-body"><form onSubmit={createModuleRecord}><div className="form-grid">{createFields[active].map(field=><label className="field" key={field.name}>{field.label}{field.type==="formation"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une formation</option>{formationOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:<input type={field.type??"text"} min={field.type==="number"?0:undefined} required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})} placeholder={field.type==="number"?"0":field.label}/>}</label>)}</div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer"}</button></div></form></div></div>}
           {active==="formations"&&showCreate&&isAdmin&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer une formation</div><div className="panel-desc">Les champs code et nom sont obligatoires.</div></div></div><div className="panel-body"><form onSubmit={createFormation}><div className="form-grid"><label className="field">Code de la formation<input required value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})} placeholder="Ex. PILOTAGE-01"/></label><label className="field">Nom de la formation<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Ex. Initiation au pilotage"/></label><label className="field">Durée<input value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})} placeholder="Ex. 6 mois"/></label><label className="field">Description<input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Présentation de la formation"/></label></div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer la formation"}</button></div></form></div></div>}
           <div className="panel"><div className="panel-head"><div><div className="panel-title">{activeModule.label} enregistrés</div><div className="panel-desc">Données affichées selon vos autorisations · maximum 100 lignes</div></div><div className="table-toolbar"><input className="search-box" placeholder="Rechercher dans les résultats…" value={search} onChange={e=>setSearch(e.target.value)}/><button className="btn btn-quiet" onClick={()=>void loadRows(active)}>↻ Actualiser</button></div></div>
             {loading?<div className="loading">Chargement des données…</div>:filteredRows.length===0?<div className="empty-state"><div className="empty-icon">⌕</div><strong>{rows.length===0?"Aucune donnée à afficher":"Aucun résultat"}</strong><div style={{marginTop:7}}>{rows.length===0?"Ce module est vide ou les règles d’accès empêchent la lecture.":"Essayez avec un autre terme de recherche."}</div></div>:<div className="table-wrap"><table><thead><tr>{Object.keys(filteredRows[0]).map(k=><th key={k}>{pretty(k)}</th>)}</tr></thead><tbody>{filteredRows.map((row,i)=><tr key={String(row.id??row.code??i)}>{Object.entries(row).map(([k,v])=><td key={k}>{k==="status"&&v!=null?<span className={"pill "+statusClass(String(v))}>{pretty(String(v))}</span>:v==null?"—":typeof v==="boolean"?(v?"Oui":"Non"):typeof v==="object"?JSON.stringify(v):String(v).length>48?String(v).slice(0,45)+"…":String(v)}</td>)}</tr>)}</tbody></table></div>}
