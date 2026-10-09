@@ -267,7 +267,7 @@ export default function Home() {
     return rows.filter(row => Object.values(row).some(value => String(value ?? "").toLowerCase().includes(q)));
   }, [rows, search]);
   const isAdmin = roles.some(r => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
-  const isSecretary = roles.some(r => ["SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
+  const isSecretary = roles.some(r => ["SECRETARY", "SECRETARIAT", "SECRETAIRE", "SECRÉTAIRE", "DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
 
   if (!user) return <main className="login-screen">
     <section className="login-visual">
