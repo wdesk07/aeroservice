@@ -245,6 +245,12 @@ export default function Home() {
     if (accessResult.error) {
       setError("Le paiement est validé, mais la mise à jour de l’autorisation d’accès a échoué. Prévenez l’administration. Détail : " + accessResult.error.message);
     } else {
+      await supabase.from("attendance_events").insert({
+        attendance_id: attendanceResult.data.id, person_id: lateForm.person_id,
+        event_type: "regularized", occurred_at: new Date().toISOString(),
+        source: "secretariat", created_by: user.id,
+        metadata: { person_type: lateForm.person_type, delay_minutes: delayMinutes, amount_fcfa: amount, payment_method: lateForm.method, payment_status: "validated", authorized_by: user.id, access_authorized: true, reason: lateForm.reason.trim() || null }
+      });
       setNotice(`Retard enregistré : ${delayMinutes} minute(s). Paiement de ${amount.toLocaleString("fr-FR")} FCFA validé. Accès autorisé — dossier affiché en jaune.`);
       setLateForm({ person_type: "student", person_id: "", planned_time: "08:00", arrived_time: "", amount_fcfa: "", method: "cash", provider: "", transaction_reference: "", reason: "" });
     }
