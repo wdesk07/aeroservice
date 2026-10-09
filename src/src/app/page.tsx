@@ -126,22 +126,12 @@ export default function Home() {
     if (parts.length < 2) { setError("Veuillez saisir votre nom et votre prénom."); setBusy(false); return; }
     const { data, error: signupError } = await supabase.auth.signUp({
       email: email.trim(), password,
-      options: { data: { display_name: signupName.trim(), first_name: parts.slice(0, -1).join(" "), last_name: parts[parts.length - 1], phone: signupPhone.trim(), requested_role: "STUDENT", signup_flow: "public_learner" } }
+      options: { data: { display_name: signupName.trim(), first_name: parts.slice(0, -1).join(" "), last_name: parts[parts.length - 1], phone: signupPhone.trim(), requested_role: "STUDENT", signup_flow: "public_learner", formation_id: signupFormation } }
     });
     if (signupError || !data.user) { setError(signupError?.message || "Création du compte impossible."); setBusy(false); return; }
-    const registrationNumber = "AS-" + new Date().getFullYear() + "-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-    const { error: registrationError } = await supabase.from("registrations").insert({
-      registration_number: registrationNumber, person_id: data.user.id,
-      formation_id: signupFormation || null, registration_date: new Date().toISOString().slice(0, 10),
-      status: "pending", admission_source: "public_signup", submitted_at: new Date().toISOString(), notes: signupPhone.trim() ? "Téléphone : " + signupPhone.trim() : null
-    });
     await supabase.auth.signOut();
-    if (registrationError) {
-      setError("Le compte a été créé, mais la demande d’inscription n’a pas pu être enregistrée. Contactez le secrétariat pour finaliser votre dossier. Détail : " + registrationError.message);
-    } else {
-      setNotice("Votre compte a été créé et votre demande envoyée au secrétariat. Vous pourrez vous connecter après validation de votre dossier. Si un e-mail de confirmation est demandé, veuillez d’abord confirmer votre adresse.");
-      setMode("login"); setPassword(""); setSignupName(""); setSignupPhone(""); setSignupFormation("");
-    }
+    setNotice("Votre compte a été créé et votre demande envoyée au secrétariat. Votre dossier est en attente de validation. Si un e-mail de confirmation est demandé, veuillez d’abord confirmer votre adresse.");
+    setMode("login"); setPassword(""); setSignupName(""); setSignupPhone(""); setSignupFormation("");
     setBusy(false);
   }
   async function handleReset(e: React.FormEvent<HTMLFormElement>) {
