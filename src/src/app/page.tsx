@@ -123,7 +123,7 @@ export default function Home() {
   }
   async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
-    const parts = signupName.trim().split(/\\s+/);
+    const parts = signupName.trim().split(/\s+/);
     if (parts.length < 2) { setError("Veuillez saisir votre nom et votre prénom."); setBusy(false); return; }
     const { data, error: signupError } = await supabase.auth.signUp({
       email: email.trim(), password,
@@ -205,7 +205,7 @@ export default function Home() {
       setBusy(false);
       return;
     }
-    const parts = newAccount.display_name.trim().split(/\\s+/);
+    const parts = newAccount.display_name.trim().split(/\s+/);
     const createdProfile = { id: data.user_id, display_name: newAccount.display_name.trim(), first_name: parts.slice(0, -1).join(" ") || newAccount.display_name.trim(), last_name: parts.length > 1 ? parts[parts.length - 1] : "", public_id: null };
     setProfileOptions(current => [createdProfile, ...current.filter(item => item.id !== data.user_id)]);
     if (data.role_code === "STUDENT") {
