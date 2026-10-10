@@ -22,7 +22,7 @@ const modules: ModuleConfig[] = [
   { key: "rooms", label: "Salles", icon: "⌂", table: "rooms", columns: ["code", "name", "capacity", "location_description", "status"], description: "Salles et espaces de formation.", section: "ORGANISATION" },
   { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["id", "registration_number", "person_id", "formation_id", "group_id", "registration_date", "status", "submitted_at", "review_comment"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
   { key: "attendance", label: "Présences", icon: "◷", table: "attendance", columns: ["person_id", "person_type", "status", "planned_at", "arrived_at", "delay_minutes", "access_blocked", "anomaly_reason"], description: "Pointage et suivi des présences.", section: "ADMINISTRATION" },
-  { key: "payments", label: "Paiements", icon: "₣", table: "payments", columns: ["person_id", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Suivi des règlements et frais.", section: "FINANCES" },
+  { key: "payments", label: "Paiements", icon: "₣", table: "payments", columns: ["payment_type", "penalty_id", "person_id", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Paiements ordinaires et règlement des pénalités.", section: "FINANCES" },
   { key: "staff", label: "Personnel", icon: "♙", table: "staff", columns: ["id", "staff_number", "department", "position", "hire_date", "status"], description: "Personnel administratif et opérationnel.", section: "ADMINISTRATION" },
   { key: "roles", label: "Rôles & accès", icon: "⚿", table: "roles", columns: ["code", "name", "description", "is_system"], description: "Rôles disponibles dans la plateforme.", section: "SYSTÈME" },
   { key: "settings", label: "Paramètres", icon: "⚙", description: "Profil et préférences de session.", section: "SYSTÈME" }
@@ -81,6 +81,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [counts, setCounts] = useState<Record<string, number | null>>({});
+  const [financeTotals, setFinanceTotals] = useState<{today:number|null;month:number|null;year:number|null;pending:number|null;count:number|null}>({today:null,month:null,year:null,pending:null,count:null});
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -124,6 +125,44 @@ export default function Home() {
     } else setRows((result.data ?? []) as unknown as Record<string, unknown>[]);
     setLoading(false);
   }, [roles]);
+
+  useEffect(() => {
+    if (!user || !roles.some(role => ["ACCOUNTING", "FINANCE"].includes(role.code.toUpperCase()))) {
+      setFinanceTotals({today:null,month:null,year:null,pending:null,count:null});
+      return;
+    }
+    let cancelled = false;
+    const loadFinanceTotals = async () => {
+      const { data, error: paymentsError } = await supabase
+        .from("payments")
+        .select("amount_fcfa,received_at,status")
+        .limit(5000);
+      if (cancelled) return;
+      if (paymentsError || !data) {
+        setFinanceTotals({today:null,month:null,year:null,pending:null,count:null});
+        return;
+      }
+      const now = new Date();
+      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      const startYear = new Date(now.getFullYear(), 0, 1).getTime();
+      const rows = data as {amount_fcfa:number|null;received_at:string|null;status:string|null}[];
+      const validated = rows.filter(row => ["validated", "paid", "success"].includes((row.status ?? "").toLowerCase()));
+      const sumSince = (start:number) => validated.reduce((sum,row) => {
+        const timestamp = row.received_at ? new Date(row.received_at).getTime() : NaN;
+        return Number.isFinite(timestamp) && timestamp >= start && timestamp <= now.getTime() ? sum + Number(row.amount_fcfa || 0) : sum;
+      }, 0);
+      setFinanceTotals({
+        today: sumSince(startToday),
+        month: sumSince(startMonth),
+        year: sumSince(startYear),
+        pending: rows.filter(row => ["pending", "submitted", "pre_review"].includes((row.status ?? "").toLowerCase())).length,
+        count: validated.length
+      });
+    };
+    void loadFinanceTotals();
+    return () => { cancelled = true; };
+  }, [user, roles]);
 
   useEffect(() => {
     let mounted = true;
@@ -215,25 +254,40 @@ export default function Home() {
       { name: "name", label: "Nom de la salle", required: true },
       { name: "capacity", label: "Capacité", type: "number" },
       { name: "location_description", label: "Emplacement" }
+    ],
+    payments: [
+      { name: "payment_type", label: "Type de paiement", type: "select", required: true, options: [{ label: "Paiement ordinaire", value: "ordinary" }, { label: "Règlement d’une pénalité", value: "penalty" }] },
+      { name: "penalty_id", label: "Pénalité à régler", type: "penalty", required: true },
+      { name: "person_id", label: "Bénéficiaire", type: "profile", required: true },
+      { name: "amount_fcfa", label: "Montant (FCFA)", type: "number", required: true },
+      { name: "method", label: "Mode de paiement", type: "select", required: true, options: [{ label: "Espèces", value: "cash" }, { label: "Mobile Money", value: "mobile_money" }, { label: "Autre", value: "other" }] },
+      { name: "provider", label: "Opérateur / précision" },
+      { name: "transaction_reference", label: "Référence de transaction" }
     ]
   };
   const [formationOptions, setFormationOptions] = useState<{ id: string; name: string; code: string }[]>([]);
   const [groupOptions, setGroupOptions] = useState<{ id: string; name: string; code: string }[]>([]);
   const [profileOptions, setProfileOptions] = useState<{ id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]>([]);
+  const [penaltyOptions, setPenaltyOptions] = useState<{ id: string; person_id: string; amount_fcfa: number; status: string }[]>([]);
   useEffect(() => {
     if (user && ["students", "groups", "subjects", "registrations"].includes(active)) {
       supabase.from("formations").select("id,name,code").order("name").then(({ data }) => setFormationOptions((data ?? []) as { id: string; name: string; code: string }[]));
     }
-    if (user && ["students", "registrations", "attendance"].includes(active)) {
+    if (user && ["students", "registrations", "attendance", "payments"].includes(active)) {
       supabase.from("groups").select("id,name,code").order("name").then(({ data }) => setGroupOptions((data ?? []) as { id: string; name: string; code: string }[]));
       supabase.from("profiles").select("id,display_name,first_name,last_name,public_id").order("last_name").limit(300).then(({ data }) => setProfileOptions((data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]));
       supabase.from("staff").select("id").then(({ data }) => setStaffIds((data ?? []).map((item: { id: string }) => item.id)));
+      if (active === "payments") {
+        supabase.from("penalties").select("id,person_id,amount_fcfa,status").eq("status", "pending").gt("amount_fcfa", 0).order("created_at", { ascending: true }).then(({ data, error }) => {
+          setPenaltyOptions(error ? [] : (data ?? []) as { id: string; person_id: string; amount_fcfa: number; status: string }[]);
+        });
+      } else setPenaltyOptions([]);
     }
   }, [user, active]);
 
   async function createAccountForRegistration(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!isSecretary && !isAdmin) { setError("Vous n’êtes pas autorisé à créer un compte."); return; }
+    if (!canCreateStaffAccount) { setError("Seul le secrétariat ou la direction peut créer un compte."); return; }
     setBusy(true); setError(""); setNotice("");
     const { data, error: accountError } = await supabase.functions.invoke("secretariat-create-account", {
       body: { display_name: newAccount.display_name.trim(), email: newAccount.email.trim(), password: newAccount.password, phone: newAccount.phone.trim(), role_code: newAccount.role_code }
@@ -259,7 +313,9 @@ export default function Home() {
 
   async function createModuleRecord(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!(isAdmin || (isSecretary && active === "registrations")) || !createFields[active]) return;
+    const canRecordPayment = roles.some(role => ["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
+    const canCreateActiveRecord = active === "payments" ? canRecordPayment : (isAdmin || (isSecretary && active === "registrations"));
+    if (!canCreateActiveRecord || !createFields[active]) return;
     setBusy(true); setError(""); setNotice("");
     const payload: Record<string, unknown> = {};
     for (const field of createFields[active]) {
@@ -269,10 +325,42 @@ export default function Home() {
       else payload[field.name] = value || null;
     }
     if (active === "registrations") { payload.created_by = user?.id; payload.submitted_at = new Date().toISOString(); }
+    if (active === "payments") {
+      const paymentType = String(payload.payment_type ?? "");
+      if (paymentType !== "ordinary" && paymentType !== "penalty") {
+        setError("Choisissez un type de paiement valide."); setBusy(false); return;
+      }
+      if (paymentType === "penalty") {
+        if (typeof payload.penalty_id !== "string" || !payload.penalty_id) {
+          setError("Sélectionnez une pénalité en attente avant d’enregistrer le paiement."); setBusy(false); return;
+        }
+        const selectedPenalty = penaltyOptions.find(item => item.id === payload.penalty_id && item.status === "pending" && Number(item.amount_fcfa) > 0);
+        if (!selectedPenalty) {
+          setError("Cette pénalité n’est plus disponible. Actualisez la liste puis réessayez."); setBusy(false); return;
+        }
+        // Le trigger Supabase recalcule le bénéficiaire et le montant depuis la pénalité.
+        payload.person_id = null;
+        payload.amount_fcfa = null;
+      } else {
+        const personId = String(payload.person_id ?? "");
+        const amount = Number(payload.amount_fcfa);
+        if (!personId || !profileOptions.some(item => item.id === personId)) {
+          setError("Choisissez un bénéficiaire existant."); setBusy(false); return;
+        }
+        if (!Number.isSafeInteger(amount) || amount <= 0) {
+          setError("Le montant ordinaire doit être un nombre entier strictement positif."); setBusy(false); return;
+        }
+        payload.person_id = personId;
+        payload.amount_fcfa = amount;
+        payload.penalty_id = null;
+      }
+      payload.status = "pending";
+      payload.receipt_number = null;
+    }
     const { error: insertError } = await supabase.from(active).insert(payload);
     if (insertError) setError(insertError.message);
     else {
-      setNotice("Enregistrement créé avec succès.");
+      setNotice(active === "payments" ? "Paiement enregistré en attente de validation. Aucun reçu n’a été émis." : "Enregistrement créé avec succès.");
       setCreateValues({}); setShowCreate(false);
       await loadRows(active); await loadCounts();
     }
@@ -345,6 +433,35 @@ export default function Home() {
     await loadRows("attendance"); await loadCounts(); setBusy(false);
   }
 
+  async function validatePayment(payment: Record<string, unknown>) {
+    const canValidate = roles.some(role => ["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
+    if (!user || !canValidate) { setError("Vous n’avez pas l’autorisation de valider ce paiement."); return; }
+    const paymentId = String(payment.id ?? "");
+    const status = String(payment.status ?? "").toLowerCase();
+    if (!paymentId || status !== "pending") {
+      setError("Ce paiement n’est pas en attente ou son identifiant est manquant."); return;
+    }
+    const amount = Number(payment.amount_fcfa);
+    if (!Number.isFinite(amount) || amount <= 0) { setError("Montant du paiement invalide : validation annulée."); return; }
+    const now = new Date();
+    const datePart = now.toISOString().slice(0,10).replace(/-/g,"");
+    // Identifiant complet du paiement : le numéro reste unique sans dépendre du hasard.
+    const receiptNumber = `AS-${datePart}-${paymentId.replace(/-/g,"").toUpperCase()}`;
+    setBusy(true); setError(""); setNotice("");
+    const { data: updatedPayment, error: updateError } = await supabase.from("payments")
+      .update({ status: "validated", validated_at: now.toISOString(), validated_by: user.id, receipt_number: receiptNumber })
+      .eq("id", paymentId).eq("status", "pending")
+      .select("id,receipt_number").maybeSingle();
+    if (updateError || !updatedPayment) {
+      setError("Le paiement n’a pas été validé. Aucune validation n’est confirmée par la base. " + (updateError?.message || "Il a peut-être déjà été traité."));
+    } else {
+      setNotice("Paiement validé. Reçu n° " + String(updatedPayment.receipt_number || receiptNumber) + ". Imprimez ou notez ce numéro depuis le tableau des paiements.");
+      await loadRows("payments");
+      await loadCounts();
+    }
+    setBusy(false);
+  }
+
   async function reviewRegistration(registration: Record<string, unknown>, decision: "approved" | "rejected") {
     if (!user || !isSecretary) {
       setError("Vous n’avez pas l’autorisation de traiter cette inscription. Reconnectez-vous avec le compte du secrétariat.");
@@ -414,6 +531,8 @@ export default function Home() {
   }, [rows, search]);
   const isAdmin = roles.some(r => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
   const isSecretary = roles.some(r => ["SECRETARY", "SECRETARIAT", "SECRETAIRE", "SECRÉTAIRE", "DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(r.code.toUpperCase()));
+  // Keep account-creation UI aligned with the Edge Function authorization check.
+  const canCreateStaffAccount = roles.some(r => ["SECRETARIAT", "DIRECTOR"].includes(r.code.toUpperCase()));
   const roleCodes = roles.map(r => r.code.toUpperCase());
   const visibleModules = modules.filter(m => canAccessModule(m.key, roleCodes));
   const isLearner = roleCodes.some(code => ["STUDENT","APPRENANT"].includes(code));
@@ -474,7 +593,10 @@ export default function Home() {
         {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
         {active==="dashboard" && <>
           <div className="page-heading"><div><div className="eyebrow">ESPACE PERSONNEL · {roleLabel.toUpperCase()}</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">{isAdmin ? "Vue globale de l’établissement et accès aux fonctions administratives." : isSecretary ? "Espace secrétariat : inscriptions, suivi des paiements et validation des accès apprenants." : isLearner ? "Votre espace apprenant personnel." : "Retrouvez les outils correspondant à votre fonction."}</p></div>{isAdmin && <button className="btn btn-primary" onClick={()=>{setActive("formations");setShowCreate(true);}}>＋ Nouvelle formation</button>}</div>
-          {!isLearner && (isAdmin || isSecretary || roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE","ACCOUNTING","FINANCE"].includes(code))) && <div className="stats-grid">{metrics.map((metric,i)=><div className="stat-card" key={metric.table}><div className="stat-top"><span>{metric.label}</span><span className="stat-icon">{metric.icon}</span></div><div className="stat-number">{counts[metric.table]===undefined?"…":counts[metric.table]===null?"—":counts[metric.table]}</div><div className="stat-foot">{metric.foot}</div></div>)}</div>}
+          {!isLearner && roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) && <div className="stats-grid">
+            {[{label:"Recettes aujourd’hui",value:financeTotals.today,icon:"₣",foot:"Paiements validés · FCFA"},{label:"Recettes du mois",value:financeTotals.month,icon:"▦",foot:"Depuis le 1er du mois · FCFA"},{label:"Recettes de l’année",value:financeTotals.year,icon:"↗",foot:"Depuis le 1er janvier · FCFA"},{label:"Paiements en attente",value:financeTotals.pending,icon:"◷",foot:"À contrôler / valider"}].map(item=><div className="stat-card" key={item.label}><div className="stat-top"><span>{item.label}</span><span className="stat-icon">{item.icon}</span></div><div className="stat-number">{item.value===null?"—":item.value.toLocaleString("fr-FR")}</div><div className="stat-foot">{item.foot}</div></div>)}
+          </div>}
+          {!isLearner && !roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) && (isAdmin || isSecretary || roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE"].includes(code))) && <div className="stats-grid">{metrics.map(metric=><div className="stat-card" key={metric.table}><div className="stat-top"><span>{metric.label}</span><span className="stat-icon">{metric.icon}</span></div><div className="stat-number">{counts[metric.table]===undefined?"…":counts[metric.table]===null?"—":counts[metric.table]}</div><div className="stat-foot">{metric.foot}</div></div>)}</div>}
           {!isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Accès rapide</div><div className="panel-desc">Retrouvez les espaces de travail les plus utilisés.</div></div></div><div className="panel-body"><div className="quick-grid">{[
             {key:"students" as ModuleKey,icon:"♙",title:"Gérer les apprenants",desc:"Consulter les dossiers et parcours"},
             {key:"formations" as ModuleKey,icon:"✈",title:"Catalogue des formations",desc:"Organiser l’offre pédagogique"},
@@ -482,18 +604,18 @@ export default function Home() {
             {key:"attendance" as ModuleKey,icon:"◷",title:"Présences & pointage",desc:"Consulter les feuilles de présence"},
             {key:"payments" as ModuleKey,icon:"₣",title:"Suivi des paiements",desc:"Consulter les règlements"},
             {key:"roles" as ModuleKey,icon:"⚿",title:"Rôles & autorisations",desc:"Consulter les rôles configurés"}
-          ].map(q=><button className="quick-action" key={q.key} onClick={()=>{setActive(q.key);setSearch("");setError("");}}><span className="quick-icon">{q.icon}</span><span><div className="quick-title">{q.title}</div><div className="quick-desc">{q.desc}</div></span><span style={{marginLeft:"auto",color:"#9aa8b8"}}>→</span></button>)}</div></div></div>}
+          ].filter(q => canAccessModule(q.key, roleCodes)).map(q=><button className="quick-action" key={q.key} onClick={()=>{setActive(q.key);setSearch("");setError("");}}><span className="quick-icon">{q.icon}</span><span><div className="quick-title">{q.title}</div><div className="quick-desc">{q.desc}</div></span><span style={{marginLeft:"auto",color:"#9aa8b8"}}>→</span></button>)}</div></div></div>}
           {isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre espace apprenant</div><div className="panel-desc">Bienvenue dans votre espace personnel. Les informations pédagogiques et votre suivi doivent être consultés depuis les rubriques qui vous sont autorisées.</div></div></div><div className="panel-body">Votre rôle actuel : <strong>Apprenant</strong>. Les fonctions de gestion, les dossiers d’autres apprenants, le personnel et les paramètres administratifs ne sont pas accessibles depuis ce compte.</div></div>}
           <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"À vérifier"}</span></div></div></div></div>
         </>}
         {active!=="dashboard" && active!=="settings" && <>
-          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{active === "attendance" ? "Enregistrez le retard, validez le montant payé et autorisez l’accès à l’apprenant." : activeModule.description}</p></div>{(["formations","students","registrations","groups","subjects","rooms"].includes(active)&&(isAdmin||(active==="registrations"&&isSecretary)))&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="students"?"＋ Ajouter un dossier":active==="registrations"?"＋ Nouvelle inscription":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":"＋ Ajouter une salle"}</button>}</div>
+          <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{active === "attendance" ? "Enregistrez le retard, validez le montant payé et autorisez l’accès à l’apprenant." : activeModule.description}</p></div>{((["formations","students","registrations","groups","subjects","rooms"].includes(active)&&(isAdmin||(active==="registrations"&&canCreateStaffAccount)))||(active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()))))&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="students"?"＋ Ajouter un dossier":active==="registrations"?"＋ Nouvelle inscription":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":active==="payments"?"＋ Enregistrer un paiement":"＋ Ajouter une salle"}</button>}</div>
           {active === "attendance" && isSecretary && <div className="panel late-panel"><div className="panel-head"><div><div className="panel-title">Retard et autorisation d’accès</div><div className="panel-desc">{isAdmin ? "Pour les apprenants et le personnel. Le DG et l’administration retrouvent les retards et paiements validés." : "Réservé aux apprenants : après validation du paiement, leur accès est autorisé. La secrétaire ne peut pas valider l’accès du personnel."}</div></div><span className="pill late-status">● Validation secrétaire</span></div><div className="panel-body"><form onSubmit={registerLateArrival}><div className="form-grid">{isAdmin && <label className="field">Catégorie<select required value={lateForm.person_type} onChange={e=>setLateForm({...lateForm,person_type:e.target.value,person_id:""})}><option value="student">Apprenant</option><option value="staff">Personnel</option></select></label>}<label className="field">{lateForm.person_type === "staff" ? "Membre du personnel" : "Apprenant"}<select required value={lateForm.person_id} onChange={e=>setLateForm({...lateForm,person_id:e.target.value})}><option value="">Rechercher / choisir une personne</option>{profileOptions.filter(item=>lateForm.person_type !== "staff" || staffIds.includes(item.id)).map(item=><option key={item.id} value={item.id}>{item.public_id ? item.public_id + " — " : ""}{item.display_name||[item.first_name,item.last_name].filter(Boolean).join(" ")||item.id}</option>)}</select></label><label className="field">Heure normale d’arrivée<input type="time" required value={lateForm.planned_time} onChange={e=>setLateForm({...lateForm,planned_time:e.target.value})}/></label><label className="field">Heure d’arrivée constatée<input type="time" value={lateForm.arrived_time} onChange={e=>setLateForm({...lateForm,arrived_time:e.target.value})} /></label><label className="field">Montant payé (FCFA)<input type="number" min="1" step="1" required value={lateForm.amount_fcfa} onChange={e=>setLateForm({...lateForm,amount_fcfa:e.target.value})} placeholder="Ex. 1000"/></label><label className="field">Mode de paiement<select required value={lateForm.method} onChange={e=>setLateForm({...lateForm,method:e.target.value})}><option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="other">Autre</option></select></label><label className="field">Opérateur (facultatif)<input value={lateForm.provider} onChange={e=>setLateForm({...lateForm,provider:e.target.value})} placeholder="Ex. MTN, Moov…"/></label><label className="field">Référence du paiement (facultatif)<input value={lateForm.transaction_reference} onChange={e=>setLateForm({...lateForm,transaction_reference:e.target.value})} placeholder="Référence ou numéro de reçu"/></label><label className="field">Motif / observation (facultatif)<input value={lateForm.reason} onChange={e=>setLateForm({...lateForm,reason:e.target.value})} placeholder="Ex. transport, circulation…"/></label></div><div className="late-preview"><span className="late-dot"></span><div><strong>Après validation réussie</strong><p>Le statut devient « Retard régularisé », la ligne apparaît en jaune et l’accès est autorisé. Le montant est conservé dans le suivi des paiements.</p></div></div><div className="form-actions"><button type="button" className="btn" onClick={()=>setLateForm({person_type:"student",person_id:"",planned_time:"08:00",arrived_time:"",amount_fcfa:"",method:"cash",provider:"",transaction_reference:"",reason:""})}>Effacer</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Validation en cours…":"Valider le paiement et autoriser l’accès"}</button></div></form></div></div>}
-          {active==="registrations"&&showCreate&&isSecretary&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un compte pour un nouvel arrivant</div><div className="panel-desc">La secrétaire peut créer les identifiants et attribuer un rôle. Les rôles Direction et Pré-administrateur sont interdits ici.</div></div></div><div className="panel-body"><form onSubmit={createAccountForRegistration}><div className="form-grid"><label className="field">Nom et prénom<input required value={newAccount.display_name} onChange={e=>setNewAccount({...newAccount,display_name:e.target.value})} placeholder="Nom complet"/></label><label className="field">Adresse e-mail (identifiant)<input type="email" required value={newAccount.email} onChange={e=>setNewAccount({...newAccount,email:e.target.value})} placeholder="eleve@exemple.com"/></label><label className="field">Mot de passe initial<input type="password" required minLength={8} value={newAccount.password} onChange={e=>setNewAccount({...newAccount,password:e.target.value})} placeholder="8 caractères minimum"/></label><label className="field">Téléphone (facultatif)<input value={newAccount.phone} onChange={e=>setNewAccount({...newAccount,phone:e.target.value})} placeholder="Téléphone"/></label><label className="field">Rôle à attribuer<select required value={newAccount.role_code} onChange={e=>setNewAccount({...newAccount,role_code:e.target.value})}><option value="STUDENT">Apprenant</option><option value="TEACHER">Enseignant</option><option value="STAFF">Personnel</option><option value="TRAVEL_AGENT">Agent de voyage</option><option value="ACCOUNTING">Comptabilité / Finance</option><option value="PEDAGOGY">Responsable pédagogique</option></select></label></div><div className="form-actions"><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Création du compte…":"Créer le compte et attribuer le rôle"}</button></div></form></div></div>}
-          {active!=="formations"&&showCreate&&(isAdmin||(active==="registrations"&&isSecretary))&&createFields[active]&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un enregistrement</div><div className="panel-desc">Les données seront enregistrées dans la base existante, selon les autorisations Supabase.</div></div></div><div className="panel-body"><form onSubmit={createModuleRecord}><div className="form-grid">{createFields[active].map(field=><label className="field" key={field.name}>{field.label}{field.type==="formation"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une formation</option>{formationOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:field.type==="group"?<select value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir un groupe</option>{groupOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:field.type==="profile"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une personne</option>{profileOptions.map(item=><option key={item.id} value={item.id}>{item.display_name||[item.first_name,item.last_name].filter(Boolean).join(" ")||item.public_id||item.id}</option>)}</select>:field.type==="select"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir…</option>{field.options?.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select>:<input type={field.type??"text"} min={field.type==="number"?0:undefined} required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})} placeholder={field.type==="number"?"0":field.label}/>}</label>)}</div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer"}</button></div></form></div></div>}
+          {active==="registrations"&&showCreate&&canCreateStaffAccount&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un compte pour un nouvel arrivant</div><div className="panel-desc">La secrétaire peut créer les identifiants et attribuer un rôle. Les rôles Direction et Pré-administrateur sont interdits ici.</div></div></div><div className="panel-body"><form onSubmit={createAccountForRegistration}><div className="form-grid"><label className="field">Nom et prénom<input required value={newAccount.display_name} onChange={e=>setNewAccount({...newAccount,display_name:e.target.value})} placeholder="Nom complet"/></label><label className="field">Adresse e-mail (identifiant)<input type="email" required value={newAccount.email} onChange={e=>setNewAccount({...newAccount,email:e.target.value})} placeholder="eleve@exemple.com"/></label><label className="field">Mot de passe initial<input type="password" required minLength={8} value={newAccount.password} onChange={e=>setNewAccount({...newAccount,password:e.target.value})} placeholder="8 caractères minimum"/></label><label className="field">Téléphone (facultatif)<input value={newAccount.phone} onChange={e=>setNewAccount({...newAccount,phone:e.target.value})} placeholder="Téléphone"/></label><label className="field">Rôle à attribuer<select required value={newAccount.role_code} onChange={e=>setNewAccount({...newAccount,role_code:e.target.value})}><option value="STUDENT">Apprenant</option><option value="TEACHER">Enseignant</option><option value="STAFF">Personnel</option><option value="TRAVEL_AGENT">Agent de voyage</option><option value="ACCOUNTING">Comptabilité / Finance</option><option value="PEDAGOGY">Responsable pédagogique</option></select></label></div><div className="form-actions"><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Création du compte…":"Créer le compte et attribuer le rôle"}</button></div></form></div></div>}
+          {active!=="formations"&&showCreate&&(isAdmin||(active==="registrations"&&isSecretary)||(active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()))))&&createFields[active]&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un enregistrement</div><div className="panel-desc">{active==="payments"?"Le paiement sera créé en attente de validation. Aucun reçu ne sera émis avant validation.":"Les données seront enregistrées dans la base existante, selon les autorisations Supabase."}</div></div></div><div className="panel-body"><form onSubmit={createModuleRecord}><div className="form-grid">{createFields[active].filter(field => active !== "payments" || (field.name === "penalty_id" ? createValues.payment_type === "penalty" : ["person_id","amount_fcfa"].includes(field.name) ? createValues.payment_type === "ordinary" : true)).map(field=><label className="field" key={field.name}>{field.label}{field.type==="formation"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une formation</option>{formationOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:field.type==="group"?<select value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir un groupe</option>{groupOptions.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select>:field.type==="penalty"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une pénalité en attente</option>{penaltyOptions.map(item=>{const person=profileOptions.find(p=>p.id===item.person_id);const name=person?.display_name||[person?.first_name,person?.last_name].filter(Boolean).join(" ")||person?.public_id||"Bénéficiaire";return <option key={item.id} value={item.id}>{name} — {Number(item.amount_fcfa).toLocaleString("fr-FR")} FCFA — {item.id.slice(0,8).toUpperCase()}</option>;})}</select>:field.type==="penalty"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une pénalité en attente</option>{penaltyOptions.map(item=><option key={item.id} value={item.id}>{(profileOptions.find(p=>p.id===item.person_id)?.display_name||[profileOptions.find(p=>p.id===item.person_id)?.first_name,profileOptions.find(p=>p.id===item.person_id)?.last_name].filter(Boolean).join(" ")||"Bénéficiaire")} — {Number(item.amount_fcfa).toLocaleString("fr-FR")} FCFA</option>)}</select>:field.type==="profile"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir une personne</option>{profileOptions.map(item=><option key={item.id} value={item.id}>{item.display_name||[item.first_name,item.last_name].filter(Boolean).join(" ")||item.public_id||item.id}</option>)}</select>:field.type==="select"?<select required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})}><option value="">Choisir…</option>{field.options?.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select>:<input type={field.type??"text"} min={field.type==="number"?(active==="payments"?1:0):undefined} step={field.type==="number"&&active==="payments"?1:undefined} required={field.required} value={createValues[field.name]??""} onChange={e=>setCreateValues({...createValues,[field.name]:e.target.value})} placeholder={field.type==="number"?"0":field.label}/>}</label>)}</div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":active==="payments"?"Enregistrer en attente de validation":"Enregistrer"}</button></div></form></div></div>}
           {active==="formations"&&showCreate&&isAdmin&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer une formation</div><div className="panel-desc">Les champs code et nom sont obligatoires.</div></div></div><div className="panel-body"><form onSubmit={createFormation}><div className="form-grid"><label className="field">Code de la formation<input required value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})} placeholder="Ex. PILOTAGE-01"/></label><label className="field">Nom de la formation<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Ex. Initiation au pilotage"/></label><label className="field">Durée<input value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})} placeholder="Ex. 6 mois"/></label><label className="field">Description<input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Présentation de la formation"/></label></div><div className="form-actions"><button type="button" className="btn" onClick={()=>setShowCreate(false)}>Annuler</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Enregistrement…":"Enregistrer la formation"}</button></div></form></div></div>}
           <div className="panel"><div className="panel-head"><div><div className="panel-title">{activeModule.label} enregistrés</div><div className="panel-desc">Données affichées selon vos autorisations · maximum 100 lignes</div></div><div className="table-toolbar"><input className="search-box" placeholder="Rechercher dans les résultats…" value={search} onChange={e=>setSearch(e.target.value)}/><button className="btn btn-quiet" onClick={()=>void loadRows(active)}>↻ Actualiser</button></div></div>
-            {loading?<div className="loading">Chargement des données…</div>:filteredRows.length===0?<div className="empty-state"><div className="empty-icon">⌕</div><strong>{rows.length===0?"Aucune donnée à afficher":"Aucun résultat"}</strong><div style={{marginTop:7}}>{rows.length===0?"Ce module est vide ou les règles d’accès empêchent la lecture.":"Essayez avec un autre terme de recherche."}</div></div>:<div className="table-wrap"><table><thead><tr>{Object.keys(filteredRows[0]).filter(k=>k!=="id").map(k=><th key={k}>{k==="person_id"?"Apprenant":pretty(k)}</th>)}{active==="registrations"&&isSecretary&&<th>Actions</th>}</tr></thead><tbody>{filteredRows.map((row,i)=><tr className={String(row.status??"")==="regularized_late" ? "late-row" : undefined} key={String(row.id??row.code??i)}>{Object.entries(row).filter(([k])=>k!=="id").map(([k,v])=><td key={k}>{k==="person_id"? (profileOptions.find(p=>p.id===String(v))?.display_name || [profileOptions.find(p=>p.id===String(v))?.first_name,profileOptions.find(p=>p.id===String(v))?.last_name].filter(Boolean).join(" ") || String(v).slice(0,8)):k==="status"&&v!=null?<span className={"pill "+statusClass(String(v))}>{pretty(String(v))}</span>:v==null?"—":typeof v==="boolean"?(v?"Oui":"Non"):typeof v==="object"?JSON.stringify(v):String(v).length>48?String(v).slice(0,45)+"…":String(v)}</td>)}{active==="registrations"&&isSecretary&&String(row.status)==="pending"&&<td><button className="btn btn-primary" disabled={busy} onClick={()=>void reviewRegistration(row,"approved")}>Valider</button> <button className="btn" disabled={busy} onClick={()=>void reviewRegistration(row,"rejected")}>Rejeter</button></td>}</tr>)}</tbody></table></div>}
+            {loading?<div className="loading">Chargement des données…</div>:filteredRows.length===0?<div className="empty-state"><div className="empty-icon">⌕</div><strong>{rows.length===0?"Aucune donnée à afficher":"Aucun résultat"}</strong><div style={{marginTop:7}}>{rows.length===0?"Ce module est vide ou les règles d’accès empêchent la lecture.":"Essayez avec un autre terme de recherche."}</div></div>:<div className="table-wrap"><table><thead><tr>{Object.keys(filteredRows[0]).filter(k=>k!=="id").map(k=><th key={k}>{k==="person_id"?"Apprenant":pretty(k)}</th>)}{active==="registrations"&&isSecretary&&<th>Actions</th>}{active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()))&&<th>Actions</th>}</tr></thead><tbody>{filteredRows.map((row,i)=><tr className={String(row.status??"")==="regularized_late" ? "late-row" : undefined} key={String(row.id??row.code??i)}>{Object.entries(row).filter(([k])=>k!=="id").map(([k,v])=><td key={k}>{k==="person_id"? (profileOptions.find(p=>p.id===String(v))?.display_name || [profileOptions.find(p=>p.id===String(v))?.first_name,profileOptions.find(p=>p.id===String(v))?.last_name].filter(Boolean).join(" ") || String(v).slice(0,8)):k==="status"&&v!=null?<span className={"pill "+statusClass(String(v))}>{pretty(String(v))}</span>:v==null?"—":typeof v==="boolean"?(v?"Oui":"Non"):typeof v==="object"?JSON.stringify(v):String(v).length>48?String(v).slice(0,45)+"…":String(v)}</td>)}{active==="registrations"&&isSecretary&&String(row.status)==="pending"&&<td><button className="btn btn-primary" disabled={busy} onClick={()=>void reviewRegistration(row,"approved")}>Valider</button> <button className="btn" disabled={busy} onClick={()=>void reviewRegistration(row,"rejected")}>Rejeter</button></td>}{active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()))&&<td>{String(row.status??"").toLowerCase() === "pending"?<button className="btn btn-primary" disabled={busy} onClick={()=>void validatePayment(row)}>Valider et générer le reçu</button>:<span className="stat-foot">{row.receipt_number?`Reçu ${String(row.receipt_number)}`:"Aucune action"}</span>}</td>}</tr>)}</tbody></table></div>}
           </div>
         </>}
         {active==="settings"&&<><div className="page-heading"><div><div className="eyebrow">SYSTÈME</div><h1 className="page-title">Paramètres du compte</h1><p className="page-subtitle">Consultez les informations de votre session et la configuration de sécurité.</p></div></div><div className="panel"><div className="panel-head"><div className="panel-title">Profil connecté</div></div><div className="panel-body" style={{display:"grid",gap:18}}><div><div className="stat-foot">Nom affiché</div><div style={{fontWeight:700,marginTop:5}}>{fullName}</div></div><div><div className="stat-foot">E-mail</div><div style={{fontWeight:700,marginTop:5}}>{user.email}</div></div><div><div className="stat-foot">Rôles</div><div style={{marginTop:5}}>{roles.map(r=><span className="pill" key={r.code} style={{marginRight:6}}>{r.name}</span>)}</div></div><div><div className="stat-foot">Statut</div><div style={{marginTop:5}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"Non renseigné"}</span></div></div><button className="btn" style={{justifySelf:"start"}} onClick={handleSignOut}>Se déconnecter de cette session</button></div></div><div className="panel"><div className="panel-head"><div className="panel-title">Sécurité et données</div></div><div className="panel-body" style={{fontSize:12,color:"#758396",lineHeight:1.8}}>La connexion est gérée par Supabase Auth. Les données sont chargées via les politiques de sécurité (RLS) configurées sur la base. Aucun secret de serveur n’est embarqué dans cette interface.</div></div></>}
