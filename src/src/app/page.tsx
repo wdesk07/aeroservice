@@ -228,13 +228,6 @@ export default function Home() {
       { name: "enrollment_date", label: "Date d’inscription", type: "date" },
       { name: "education_level", label: "Niveau d’études" }
     ],
-    payments: [
-      { name: "person_id", label: "Apprenant / bénéficiaire", type: "profile", required: true },
-      { name: "amount_fcfa", label: "Montant reçu (FCFA)", type: "number", required: true },
-      { name: "method", label: "Mode de paiement", type: "select", required: true, options: [{ label: "Espèces", value: "cash" }, { label: "Mobile Money", value: "mobile_money" }, { label: "Virement bancaire", value: "bank_transfer" }, { label: "Carte", value: "card" }, { label: "Autre", value: "other" }] },
-      { name: "provider", label: "Opérateur / banque (facultatif)" },
-      { name: "transaction_reference", label: "Référence de transaction (facultatif)" }
-    ],
     registrations: [
       { name: "registration_number", label: "Numéro d’inscription", required: true },
       { name: "person_id", label: "Personne", type: "profile", required: true },
