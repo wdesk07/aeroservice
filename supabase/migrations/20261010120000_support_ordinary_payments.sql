@@ -7,6 +7,12 @@ alter table public.payments
   add constraint payments_payment_type_check
   check (payment_type in ('penalty', 'ordinary'));
 
+-- A penalty can have at most one open or successfully settled payment.
+-- Refused payments release the penalty for a later retry.
+create unique index if not exists payments_one_open_or_validated_per_penalty
+  on public.payments (penalty_id)
+  where penalty_id is not null and status in ('pending', 'validated');
+
 create or replace function private.guard_payment_server_fields()
 returns trigger
 language plpgsql
@@ -133,24 +139,19 @@ begin
       raise exception 'Payment identity and amount are immutable';
     end if;
 
-    if new.status = 'validated' then
+    if new.status = 'validated' and old.status is distinct from 'validated' then
       if not public.is_admin_actor()
          and not public.has_any_role(array['SECRETARIAT','ACCOUNTING']) then
         raise exception 'Unauthorized payment validation';
       end if;
 
-      if new.payment_type = 'penalty'
-         and new.amount_fcfa <> (
-           select p.amount_fcfa from public.penalties p where p.id = new.penalty_id
-         ) then
-        raise exception 'Payment amount must equal penalty amount';
-      end if;
-
-      if new.validated_by is null then
-        raise exception 'validated_by is required for a validated payment';
-      end if;
-      if new.validated_at is null then
-        raise exception 'validated_at is required for a validated payment';
+      if new.payment_type = 'penalty' and not exists (
+        select 1 from public.penalties p
+        where p.id = new.penalty_id
+          and p.status = 'pending'
+          and p.amount_fcfa = new.amount_fcfa
+      ) then
+        raise exception 'PENALTY_NOT_PAYABLE';
       end if;
     end if;
   end if;
