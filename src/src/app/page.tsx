@@ -261,6 +261,13 @@ export default function Home() {
       { name: "name", label: "Nom de la salle", required: true },
       { name: "capacity", label: "Capacité", type: "number" },
       { name: "location_description", label: "Emplacement" }
+    ],
+    payments: [
+      { name: "person_id", label: "Apprenant / bénéficiaire", type: "profile", required: true },
+      { name: "amount_fcfa", label: "Montant reçu (FCFA)", type: "number", required: true },
+      { name: "method", label: "Mode de paiement", type: "select", required: true, options: [{ label: "Espèces", value: "cash" }, { label: "Mobile Money", value: "mobile_money" }, { label: "Autre", value: "other" }] },
+      { name: "provider", label: "Opérateur / précision" },
+      { name: "transaction_reference", label: "Référence de transaction" }
     ]
   };
   const [formationOptions, setFormationOptions] = useState<{ id: string; name: string; code: string }[]>([]);
@@ -316,6 +323,13 @@ export default function Home() {
       else payload[field.name] = value || null;
     }
     if (active === "registrations") { payload.created_by = user?.id; payload.submitted_at = new Date().toISOString(); }
+    if (active === "payments") {
+      const amount = Number(payload.amount_fcfa);
+      if (!Number.isFinite(amount) || amount <= 0) { setError("Le montant doit être supérieur à zéro."); setBusy(false); return; }
+      payload.amount_fcfa = Math.round(amount);
+      payload.status = "pending";
+      payload.received_by = user?.id ?? null;
+    }
     if (active === "payments") { payload.status = "pending"; payload.received_by = user?.id; payload.receipt_number = null; }
     const { error: insertError } = await supabase.from(active).insert(payload);
     if (insertError) setError(insertError.message);
