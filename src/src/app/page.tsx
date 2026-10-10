@@ -258,7 +258,7 @@ export default function Home() {
     payments: [
       { name: "person_id", label: "Apprenant / bénéficiaire", type: "profile", required: true },
       { name: "amount_fcfa", label: "Montant reçu (FCFA)", type: "number", required: true },
-      { name: "method", label: "Mode de paiement", type: "select", required: true, options: [{ label: "Espèces", value: "cash" }, { label: "Mobile Money", value: "mobile_money" }, { label: "Autre", value: "other" }] },
+      { name: "method", label: "Mode de paiement", type: "select", required: true, options: [{ label: "Espèces", value: "cash" }, { label: "Mobile Money", value: "mobile_money" }, { label: "Virement bancaire", value: "bank_transfer" }, { label: "Carte", value: "card" }, { label: "Autre", value: "other" }] },
       { name: "provider", label: "Opérateur / précision" },
       { name: "transaction_reference", label: "Référence de transaction" }
     ]
@@ -327,7 +327,7 @@ export default function Home() {
     const { error: insertError } = await supabase.from(active).insert(payload);
     if (insertError) setError(insertError.message);
     else {
-      setNotice("Enregistrement créé avec succès.");
+      setNotice(active === "payments" ? "Paiement enregistré en attente de validation. Aucun reçu n’a été émis." : "Enregistrement créé avec succès.");
       setCreateValues({}); setShowCreate(false);
       await loadRows(active); await loadCounts();
     }
