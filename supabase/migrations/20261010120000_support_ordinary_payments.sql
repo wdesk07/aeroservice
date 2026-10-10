@@ -67,10 +67,52 @@ begin
   elsif tg_op = 'UPDATE' and new.status = 'validated' and old.status <> 'validated' then
     new.validated_at := clock_timestamp();
     new.validated_by := (select auth.uid());
+    -- The database, not the browser, issues the receipt only on validation.
+    new.receipt_number := 'AS-' || to_char(clock_timestamp(), 'YYYYMMDD') || '-' ||
+      upper(replace(new.id::text, '-', ''));
   elsif tg_op = 'UPDATE' and old.status in ('validated', 'refused') then
     raise exception 'FINAL_PAYMENT_IMMUTABLE';
   end if;
 
+  return new;
+end;
+$function$;
+
+-- The insert guard runs before the server-fields trigger (trigger names are
+-- ordered alphabetically). Permit server-derived fields to be null initially,
+-- but reject cross-type records and any explicitly supplied mismatched values.
+create or replace function private.guard_payment_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+begin
+  if new.payment_type = 'penalty' then
+    if new.penalty_id is null then
+      raise exception 'PENALTY_REQUIRED';
+    end if;
+    if new.amount_fcfa is not null and new.amount_fcfa <> (
+      select p.amount_fcfa from public.penalties p where p.id = new.penalty_id
+    ) then
+      raise exception 'Payment amount must equal penalty amount';
+    end if;
+    if new.person_id is not null and new.person_id <> (
+      select p.person_id from public.penalties p where p.id = new.penalty_id
+    ) then
+      raise exception 'Payment person must match penalty person';
+    end if;
+  elsif new.payment_type = 'ordinary' then
+    if new.penalty_id is not null then
+      raise exception 'ORDINARY_PAYMENT_CANNOT_REFERENCE_PENALTY';
+    end if;
+  else
+    raise exception 'INVALID_PAYMENT_TYPE';
+  end if;
+
+  if new.status <> 'pending' then
+    raise exception 'New payments must start as pending';
+  end if;
   return new;
 end;
 $function$;
