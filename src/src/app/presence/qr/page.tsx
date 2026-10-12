@@ -107,7 +107,7 @@ export default function DailyQrPresencePage() {
   return (
     <main style={{ minHeight: "100vh", background: "#f3f6fa", padding: "28px 16px", color: "#15243a", fontFamily: "Arial, sans-serif" }}>
       <section style={{ maxWidth: 520, margin: "0 auto", background: "#fff", border: "1px solid #dce4ef", borderRadius: 18, padding: 24, boxShadow: "0 8px 30px rgba(24,48,80,.08)" }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: "#e8f1ff", color: "#174ea6", display: "grid", placeItems: "center", fontSize: 28, marginBottom: 16 }} aria-hidden="true">✈</div>
+        <div style={{ width: 88, height: 72, borderRadius: 14, background: "#ffffff", border: "1px solid #dce4ef", display: "grid", placeItems: "center", padding: 6, marginBottom: 16 }}><img src="/logo-aero-services.jpg" alt="Logo Aéro Service" style={{ width: "100%", height: "100%", objectFit: "contain" }} /></div>
         <p style={{ margin: "0 0 6px", fontSize: 12, letterSpacing: 1.2, fontWeight: 700, color: "#45627f" }}>AÉRO SERVICE</p>
         <h1 style={{ fontSize: 26, lineHeight: 1.2, margin: "0 0 10px" }}>Présence quotidienne</h1>
         <p style={{ color: "#52647a", lineHeight: 1.6, marginTop: 0 }}>Pointage à l’entrée principale. Gardez la localisation précise activée et restez près du QR code affiché à l’entrée.</p>
