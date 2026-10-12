@@ -19,8 +19,8 @@ Depuis le dossier `src`, lancer `npm test`. La suite `tests/attendance-validatio
 - [x] Le formulaire de retard manuel utilise la limite de référence officielle et refuse une arrivée encore dans la tolérance côté interface.
 - [ ] La migration de garde serveur des retards manuels est préparée dans la branche, mais non appliquée à la base réelle.
 - [ ] Le QR et le pointage de séance nécessitent encore un raccordement et une validation séparés.
-- [x] Les 5 scénarios unitaires ont été exécutés localement et réussissent.
-- [ ] Exécuter également `npm test` dans l'environnement de build du dépôt et confirmer le résultat.
+- [x] Les 10 tests unitaires (validation des retards et limites horaires) ont été exécutés localement et réussissent.
+- [ ] Confirmer le build Vercel après la dernière correction TypeScript (le build précédent a révélé une erreur de typage, corrigée dans la branche; le nouveau build est en cours).
 - [ ] Vérifier le build Next.js/TypeScript de la dernière révision.
 
 ### Phase 2 — tests d'intégration de la base
