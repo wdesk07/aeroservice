@@ -45,17 +45,23 @@ Ce document est un plan de test. Il ne signifie pas que les scénarios ont déj�
 - [ ] La répétition de la même action ne crée pas un second paiement validé ou un second reçu.
 - [ ] Le reçu n'est émis qu'après validation.
 
-## Pointage QR — critères avant implémentation
+## Pointage QR — audit du backend et critères
 
-- [ ] Le QR imprimé pointe vers une URL fixe de l'application, pas vers l'identité d'une personne.
+Constat issu de l'inspection en lecture seule de la base Supabase Aéro Service : les tables `checkpoints` et `qr_tokens` et les fonctions `issue_qr_challenge` / `qr_checkin` existent déjà. Le flux actuel utilise un défi à durée courte (15 à 120 secondes, 45 secondes par défaut), consommé une seule fois. L'interface utilisateur QR n'est pas encore présente dans la branche de travail.
+
+**Décision de sécurité à respecter :** un QR imprimé permanent et un défi QR temporaire renouvelé sont deux modes différents. Ne pas générer un défi depuis la page qui vient d'être ouverte par un scan, car cela permettrait à quelqu'un de lancer le pointage à distance sans avoir scanné un code affiché sur place. Avant d'implémenter l'interface, choisir explicitement entre :
+- QR dynamique affiché sur un écran au point de contrôle, renouvelé régulièrement et consommé une seule fois; ou
+- QR imprimé permanent qui ouvre l'application, avec une protection de présence distincte et obligatoire côté serveur (par exemple géolocalisation vérifiée et contrôles anti-doublon). La fonction existante ne suffit pas à garantir cette variante si le défi est émis par la page du scan.
+
 - [ ] L'utilisateur doit être authentifié; après connexion, le flux reprend sans perdre la destination.
-- [ ] Le serveur détermine la personne depuis la session authentifiée, jamais depuis un identifiant fourni par le navigateur.
+- [ ] Le serveur détermine la personne depuis `auth.uid()`, jamais depuis un identifiant fourni par le navigateur.
 - [ ] Le serveur vérifie la séance ouverte, le calendrier, le rôle et la fenêtre de pointage.
-- [ ] Le pointage répété pour la même personne et la même séance est idempotent/refusé sans doublon.
+- [ ] Le défi est à usage unique, expire rapidement et n'est jamais enregistré en clair dans la base.
+- [ ] Le pointage répété pour la même personne et la même séance est refusé sans doublon.
 - [ ] La pénalité éventuelle est calculée côté base/serveur à partir des règles actives.
 - [ ] Une erreur ou une requête non autorisée ne peut ni créer une présence au nom d'autrui ni débloquer l'accès.
-- [ ] L'impression du QR inclut le logo officiel, l'URL lisible et une instruction simple.
-- [ ] Les journaux permettent d'identifier l'auteur, l'heure et la source du pointage sans exposer de secrets.
+- [ ] L'impression/affichage du QR inclut le logo officiel, l'URL lisible et une instruction simple.
+- [ ] Les journaux identifient l'auteur, l'heure et la source du pointage sans exposer de secrets.
 
 ## Validation avant fusion
 
