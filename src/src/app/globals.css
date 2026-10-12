@@ -12,3 +12,13 @@
 .late-preview{display:flex;gap:12px;align-items:flex-start;background:#fff8df;border:1px solid #f2d46b;border-radius:11px;padding:14px;margin-top:18px;color:#755400;font-size:12px}
 .late-preview p{margin:5px 0 0;line-height:1.6}
 .late-dot{width:10px;height:10px;border-radius:50%;background:#e4b300;margin-top:3px;flex-shrink:0}
+
+
+/* Official daily attendance color states: on time=green, late=red, paid late=yellow. */
+.pill.late,.pill.late-status,.pill.rejected{background:#ffeded;color:#b42323;border:1px solid #f2b8b8}
+.pill.regularized_late{background:#fff3bd;color:#815a00;border:1px solid #f2d46b}
+.late-row{background:#fff0f0!important}
+.late-row:hover{background:#ffe1e1!important}
+.late-panel{border-color:#f2b8b8}
+.late-preview{background:#fff0f0;border-color:#f2b8b8;color:#8f2020}
+.late-dot{background:#dc2626}
