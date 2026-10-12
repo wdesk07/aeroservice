@@ -8,11 +8,23 @@ Lors du contrôle de la base Supabase connectée, les colonnes `penalty_type` et
 
 Autre blocage constaté : la fonction `private.guard_attendance_insert()` actuellement déployée ne prend pas en charge les retards manuels sans `session_id`; elle cherche une séance et lève `Session not found` si aucune séance n'est fournie. La migration de la branche Finance prévoit un chemin manuel contrôlé pour le secrétariat, mais elle n'est pas appliquée à la base connectée. Le formulaire de retard manuel ne doit donc pas être déclaré opérationnel en production tant que cette différence n'a pas été testée et corrigée via une migration approuvée. Aucune migration n'a été appliquée pendant cet audit.
 
-## Préconditions
+## Plan de test sans frais supplémentaires
 
-- Utiliser uniquement une base Supabase de test isolée, avec sauvegarde préalable.
-- Vérifier que les migrations de règles de pénalité et de catégories sont appliquées sur cette base.
-- Utiliser des comptes de test avec les rôles apprenant, enseignant, personnel, secrétariat, comptabilité et direction.
+### Phase 1 — tests locaux, sans Supabase et sans écriture de données
+
+Depuis le dossier `src`, lancer `npm test`. La suite `tests/attendance-validation.test.mjs` vérifie le calcul du retard, le fuseau du Bénin, les heures mal formées et les montants invalides. Elle ne se connecte pas à Supabase et ne crée aucune présence, pénalité ou paiement.
+
+- [x] Tests unitaires de validation des retards ajoutés.
+- [x] Les 5 scénarios unitaires ont été exécutés localement et réussissent.
+- [ ] Exécuter également `npm test` dans l'environnement de build du dépôt et confirmer le résultat.
+- [ ] Vérifier le build Next.js/TypeScript de la dernière révision.
+
+### Phase 2 — tests d'intégration de la base
+
+Les tests qui insèrent réellement une présence, une pénalité ou un paiement exigent une base isolée. Si aucun environnement isolé sans frais n'est disponible, ces scénarios restent explicitement **non testés**. Ne pas simuler ces écritures dans la base de production.
+
+- Vérifier les migrations et fonctions sur une base de test isolée uniquement.
+- Utiliser des comptes de test et des données fictives.
 - Ne pas utiliser de vrais paiements ni de données personnelles réelles.
 - Ne pas fusionner ni déployer en production tant que les scénarios bloquants ne sont pas validés.
 
