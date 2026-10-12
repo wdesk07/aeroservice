@@ -40,6 +40,24 @@ Les tests qui insèrent réellement une présence, une pénalité ou un paiement
 - [ ] Un compte non autorisé ne peut pas créer de retard manuel.
 - [ ] Une erreur après la création du retard laisse l'accès bloqué et affiche une explication exploitable.
 
+## Horaires officiels demandés par la Direction
+
+Paramètres métier à appliquer dans le moteur de pointage, en heure locale du Bénin (`Africa/Porto-Novo`) :
+
+- **Personnel, secrétariat et directeur :** heure limite 08:30, tolérance zéro. À 08:30 pile, la personne est à l'heure; après 08:30, elle est en retard.
+- **Apprenants :** heure limite 09:00, tolérance de 15 minutes. Jusqu'à 09:15 inclus, l'arrivée est tolérée; à partir de 09:16, elle dépasse la tolérance.
+- Les profils doivent être classés côté serveur à partir des données fiables de la personne, et non à partir d'une valeur de type de personne fournie par le navigateur.
+- Les horaires ne doivent pas être déduits de l'heure de début d'un cours si la politique concerne l'heure d'arrivée quotidienne.
+- Aucun changement de ces paramètres n'a été appliqué à la base de production. Ils doivent être codés et testés dans la branche de travail avant toute migration.
+
+Tests de frontière à ajouter avant validation :
+
+- [ ] Personnel : 08:30 à l'heure; 08:31 en retard.
+- [ ] Apprenant : 09:00, 09:15 tolérés; 09:16 en retard.
+- [ ] Le fuseau `Africa/Porto-Novo` est appliqué même si le téléphone utilise un autre fuseau.
+- [ ] Les apprenants ne reçoivent pas la tolérance du personnel, et le personnel ne reçoit pas la tolérance des apprenants.
+- [ ] Les mêmes règles sont appliquées par le serveur pour le pointage QR et la saisie autorisée par le secrétariat.
+
 ## Règles automatiques de pénalité
 
 - [ ] Une règle inactive n'est jamais appliquée.
