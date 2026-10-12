@@ -53,7 +53,7 @@ Autre blocage constaté : la fonction `private.guard_attendance_insert()` actuel
 
 ## Pointage QR — audit du backend et critères
 
-Constat issu de l'inspection en lecture seule de la base Supabase Aéro Service : les tables `checkpoints` et `qr_tokens` et les fonctions `issue_qr_challenge` / `qr_checkin` existent déjà. Le flux actuel utilise un défi à durée courte (15 à 120 secondes, 45 secondes par défaut), consommé une seule fois. L'interface utilisateur QR n'est pas encore présente dans la branche de travail.
+Constat issu de l'inspection en lecture seule de la base Supabase Aéro Service : les tables `checkpoints` et `qr_tokens` et les fonctions `issue_qr_challenge` / `qr_checkin` existent déjà. Le flux actuel utilise un défi à durée courte (15 à 120 secondes, 45 secondes par défaut), consommé une seule fois. L'interface utilisateur QR n'est pas encore présente dans la branche de travail. Les deux points de contrôle actifs trouvés (`Entrée Aéro Service` et `Secrétariat`) n'ont pas de coordonnées GPS configurées ni de rayon défini; la vérification de distance ne peut donc pas protéger le QR permanent tant que ces paramètres ne sont pas renseignés et rendus obligatoires côté serveur.
 
 **Décision de sécurité à respecter :** un QR imprimé permanent et un défi QR temporaire renouvelé sont deux modes différents. Ne pas générer un défi depuis la page qui vient d'être ouverte par un scan, car cela permettrait à quelqu'un de lancer le pointage à distance sans avoir scanné un code affiché sur place. Avant d'implémenter l'interface, choisir explicitement entre :
 - QR dynamique affiché sur un écran au point de contrôle, renouvelé régulièrement et consommé une seule fois; ou
