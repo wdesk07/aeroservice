@@ -12,3 +12,5 @@
 .late-preview{display:flex;gap:12px;align-items:flex-start;background:#fff8df;border:1px solid #f2d46b;border-radius:11px;padding:14px;margin-top:18px;color:#755400;font-size:12px}
 .late-preview p{margin:5px 0 0;line-height:1.6}
 .late-dot{width:10px;height:10px;border-radius:50%;background:#e4b300;margin-top:3px;flex-shrink:0}
+
+.brand-mark{overflow:hidden;flex-shrink:0;padding:2px}.brand-mark img{display:block;width:100%;height:100%;object-fit:contain;border-radius:10px}
