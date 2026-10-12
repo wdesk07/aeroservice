@@ -518,13 +518,19 @@ export default function Home() {
       }
       penaltyId = penaltyResult.data.id;
     }
+    // Fail locally with a precise message rather than sending a penalty payment
+    // that the database must reject with PENALTY_REQUIRED.
+    if (typeof penaltyId !== "string" || !penaltyId.trim()) {
+      setError("Le retard est enregistré, mais aucune pénalité liée n’a été identifiée. Aucun paiement n’a été créé et l’accès reste bloqué. Actualisez les pénalités puis contactez la direction si le problème persiste.");
+      await loadRows("attendance"); await loadRows("penalties"); setBusy(false); return;
+    }
     const paymentResult = await supabase.from("payments").insert({
       payment_type: "penalty", payment_category: "penalty",
       penalty_id: penaltyId, person_id: lateForm.person_id,
       amount_fcfa: paymentAmount, method: lateForm.method,
       provider: lateForm.provider.trim() || null,
       transaction_reference: lateForm.transaction_reference.trim() || null,
-      status: "pending", received_at: arrivedAt.toISOString(), received_by: user.id
+      status: "pending"
     }).select("id").single();
     if (paymentResult.error || !paymentResult.data) {
       setError("Le retard est enregistré, mais la création du paiement a échoué. La pénalité reste à régler. L’accès reste bloqué. Détail : " + (paymentResult.error?.message || "paiement introuvable"));
