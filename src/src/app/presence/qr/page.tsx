@@ -129,7 +129,7 @@ export default function DailyQrPresencePage() {
         {message && <p role="alert" style={{ marginTop: 16, padding: 13, borderRadius: 10, background: "#fff0f0", color: "#8f2020", lineHeight: 1.5 }}>{message}</p>}
 
         {result && (
-          <div role="status" style={{ marginTop: 16, padding: 16, borderRadius: 12, background: result.duplicate ? "#fff7e6" : "#eaf7ef", border: "1px solid " + (result.duplicate ? "#f2d49b" : "#b8e0c5") }}>
+          <div role="status" style={{ marginTop: 16, padding: 16, borderRadius: 12, background: result.duplicate ? "#fff7e6" : result.status === "late" ? "#fff0f0" : "#eaf7ef", border: "1px solid " + (result.duplicate ? "#f2d49b" : result.status === "late" ? "#f2b8b8" : "#b8e0c5") }}>
             <h2 style={{ fontSize: 19, margin: "0 0 8px" }}>{result.duplicate ? "Présence déjà enregistrée" : "Présence enregistrée"}</h2>
             <p style={{ margin: "4px 0" }}>Statut : <strong>{result.status === "late" ? "En retard" : "À l’heure"}</strong></p>
             {result.arrived_at && <p style={{ margin: "4px 0" }}>Heure du pointage : {new Date(result.arrived_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })}</p>}
