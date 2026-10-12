@@ -441,12 +441,12 @@ export default function Home() {
 
   if (!user) return <main className="login-screen">
     <section className="login-visual">
-      <div className="brand"><img className="brand-mark" src="/logo-aero-services.jpg" alt="Logo officiel AERO SERVICES" /><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Plateforme de gestion</div></div></div>
+      <div className="brand"><img className="brand-mark" src="/logo.ultime.jpg" alt="Logo officiel AERO SERVICES" /><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Plateforme de gestion</div></div></div>
       <div className="login-visual-content"><div className="eyebrow" style={{color:"#9cc5ff"}}>FORMATION · ORGANISATION · SUIVI</div><h1>Prenez de la hauteur sur votre gestion.</h1><p>Un espace centralisé pour piloter les formations, suivre les apprenants et coordonner les opérations de votre établissement.</p><div className="login-bullets"><span>✦ Gestion pédagogique</span><span>✦ Suivi administratif</span><span>✦ Accès sécurisé</span></div></div>
       <div style={{fontSize:11,color:"#9db2c8",position:"relative",zIndex:1}}>© {new Date().getFullYear()} Aéro Service · Espace sécurisé</div>
     </section>
     <section className="login-form-side"><div className="login-card">
-      <div className="brand" style={{padding:"0 0 30px"}}><img className="brand-mark" src="/logo-aero-services.jpg" alt="Logo officiel AERO SERVICES" /><div><div className="brand-name" style={{color:"#10243b"}}>AÉRO SERVICE</div><div className="brand-sub" style={{color:"#758396"}}>ESPACE DE CONNEXION</div></div></div>
+      <div className="brand" style={{padding:"0 0 30px"}}><img className="brand-mark" src="/logo.ultime.jpg" alt="Logo officiel AERO SERVICES" /><div><div className="brand-name" style={{color:"#10243b"}}>AÉRO SERVICE</div><div className="brand-sub" style={{color:"#758396"}}>ESPACE DE CONNEXION</div></div></div>
       <h2>{mode === "login" ? "Bon retour parmi nous" : mode === "signup" ? "Créer un compte apprenant" : "Réinitialiser le mot de passe"}</h2><p>{mode === "login" ? "Connectez-vous pour accéder à votre espace de travail." : mode === "signup" ? "Inscrivez-vous à une formation Aéro Service. Votre dossier sera vérifié par le secrétariat." : "Recevez un lien sécurisé par e-mail."}</p>
       {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
       <form className="login-fields" onSubmit={mode === "login" ? handleLogin : mode === "signup" ? handleSignup : handleReset}>
@@ -464,7 +464,7 @@ export default function Home() {
 
   return <div className="app-shell">
     <aside className={"sidebar" + (mobileNav ? " mobile-open" : "")}>
-      <div className="brand"><img className="brand-mark" src="/logo-aero-services.jpg" alt="Logo officiel AERO SERVICES" /><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Gestion & formation</div></div></div>
+      <div className="brand"><img className="brand-mark" src="/logo.ultime.jpg" alt="Logo officiel AERO SERVICES" /><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Gestion & formation</div></div></div>
       {["PILOTAGE","PÉDAGOGIE","ORGANISATION","ADMINISTRATION","FINANCES","SYSTÈME"].map(section => visibleModules.some(m=>m.section===section) ? <div key={section}><div className="nav-label">{section}</div>{visibleModules.filter(m=>m.section===section).map(m=><button key={m.key} className={"nav-item"+(active===m.key?" active":"")} onClick={()=>{setActive(m.key);setSearch("");setShowCreate(false);setMobileNav(false);setNotice("");setError("");}}><span className="nav-icon">{m.icon}</span>{m.label}</button>)}</div> : null)}
       <div className="sidebar-bottom"><div className="sidebar-note">Espace de travail sécurisé<br/>Aéro Service · Gestion intégrée</div></div>
     </aside>
