@@ -342,7 +342,8 @@ export default function Home() {
 
   async function applyPenaltyRule(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const allowed = roles.some(role => ["DIRECTOR","PRE_ADMIN","ADMIN","SECRETARIAT"].includes(role.code.toUpperCase()));
+    // Match the current Supabase RLS policy for penalties; ADMIN alone is not granted this write policy.
+    const allowed = roles.some(role => ["DIRECTOR","PRE_ADMIN","SECRETARIAT"].includes(role.code.toUpperCase()));
     if (!allowed || !user) { setError("Votre rôle ne permet pas d’appliquer une règle de pénalité."); return; }
     const rule = penaltyRules.find(item => item.id === applyRuleForm.rule_id && item.active && item.application_mode === "manual");
     if (!rule || !applyRuleForm.person_id) { setError("Choisissez une règle manuelle active et une personne concernée."); return; }
