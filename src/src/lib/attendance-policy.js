@@ -3,7 +3,7 @@ const ATTENDANCE_POLICY = Object.freeze({
   staff: Object.freeze({ nominalTime: "08:30", toleranceMinutes: 0, cutoffTime: "08:30" }),
 });
 
-function classifyArrival(personType, arrivalTime) {
+function classifyArrival(personType, arrivalTime, now = new Date()) {
   const type = String(personType ?? "").toLowerCase();
   const category = ["student", "apprenant", "learner"].includes(type)
     ? "student"
@@ -20,7 +20,7 @@ function classifyArrival(personType, arrivalTime) {
 
   const policy = ATTENDANCE_POLICY[category];
   const toMinutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-  const arrivalMinutes = toMinutes(arrivalTime);
+  const arrivalMinutes = toMinutes(effectiveArrivalTime);
   const nominalMinutes = toMinutes(policy.nominalTime);
   const cutoffMinutes = toMinutes(policy.cutoffTime);
   const late = arrivalMinutes > cutoffMinutes;
