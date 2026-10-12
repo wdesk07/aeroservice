@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { validateManualLateArrival } = require("../src/src/lib/attendance-validation.js");
+const { validateManualLateArrival } = require("../src/lib/attendance-validation.js");
 
 const NOW = new Date("2026-10-12T09:00:00.000Z"); // 10:00 au Bénin
 
