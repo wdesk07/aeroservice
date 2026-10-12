@@ -462,9 +462,13 @@ export default function Home() {
     }
     setBusy(true); setError(""); setNotice("");
     const now = new Date();
-    // Use the browser's local calendar date consistently with the local time inputs.
-    // toISOString() is UTC and can select the wrong day around midnight in Benin.
-    const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    // Attendance times are defined in Benin time, independently of the device timezone.
+    const beninParts = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Porto-Novo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const beninPart = (type: string) => beninParts.find(part => part.type === type)?.value ?? "";
+    const day = `${beninPart("year")}-${beninPart("month")}-${beninPart("day")}`;
+    const beninClock = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
+    const timePattern = /^(?:[01]\\d|2[0-3]):[0-5]\\d$/;
+    const arrivedTime = lateForm.arrived_time || beninClock;
     const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
     const arrivedTime = lateForm.arrived_time || `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const rawAmount = Number(lateForm.amount_fcfa);
@@ -476,8 +480,8 @@ export default function Home() {
       setError("Le montant du règlement doit être un nombre entier de FCFA supérieur à zéro.");
       setBusy(false); return;
     }
-    const plannedAt = new Date(`${day}T${lateForm.planned_time}:00`);
-    const arrivedAt = new Date(`${day}T${arrivedTime}:00`);
+    const plannedAt = new Date(`${day}T${lateForm.planned_time}:00+01:00`);
+    const arrivedAt = new Date(`${day}T${arrivedTime}:00+01:00`);
     const delayMinutes = Math.floor((arrivedAt.getTime() - plannedAt.getTime()) / 60000);
     if (!Number.isFinite(delayMinutes) || delayMinutes <= 0) {
       setError("L’heure d’arrivée doit être postérieure à l’heure prévue pour enregistrer un retard.");
