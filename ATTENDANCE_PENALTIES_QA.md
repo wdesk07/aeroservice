@@ -2,6 +2,10 @@
 
 Ce document est un plan de test. Il ne signifie pas que les scénarios ont déjà été exécutés.
 
+## État du schéma (lecture seule)
+
+Lors du contrôle de la base Supabase connectée, les colonnes `penalty_type` et `description` sont présentes, mais `target_scope`, `application_mode` et `applies_after_time` ne sont pas présentes sur `penalty_rules`. La migration qui ajoute ces colonnes existe sur la branche Finance, mais elle n'est pas enregistrée dans l'historique de migrations appliquées de la base connectée. Le panneau de règles générales ne doit donc pas être utilisé sur cette base avant un essai isolé et une migration validée. Aucune migration n'a été appliquée pendant cet audit.
+
 ## Préconditions
 
 - Utiliser uniquement une base Supabase de test isolée, avec sauvegarde préalable.
