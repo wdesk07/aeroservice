@@ -467,10 +467,8 @@ export default function Home() {
     const beninPart = (type: string) => beninParts.find(part => part.type === type)?.value ?? "";
     const day = `${beninPart("year")}-${beninPart("month")}-${beninPart("day")}`;
     const beninClock = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
-    const timePattern = /^(?:[01]\\d|2[0-3]):[0-5]\\d$/;
-    const arrivedTime = lateForm.arrived_time || beninClock;
     const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-    const arrivedTime = lateForm.arrived_time || `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const arrivedTime = lateForm.arrived_time || beninClock;
     const rawAmount = Number(lateForm.amount_fcfa);
     if (!timePattern.test(lateForm.planned_time) || !timePattern.test(arrivedTime)) {
       setError("Vérifiez l’heure prévue et l’heure d’arrivée.");
