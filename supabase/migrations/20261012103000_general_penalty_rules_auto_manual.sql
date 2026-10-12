@@ -21,59 +21,40 @@ create unique index if not exists penalties_one_per_attendance
   on public.penalties(attendance_id)
   where attendance_id is not null;
 
-create or replace function public.apply_automatic_penalty_for_attendance()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  selected_rule public.penalty_rules%rowtype;
-  local_arrival timestamp without time zone;
-begin
-  if new.status <> 'late' or new.arrived_at is null then
-    return new;
-  end if;
-
-  local_arrival := new.arrived_at at time zone 'Africa/Porto-Novo';
-
-  select r.* into selected_rule
-  from public.penalty_rules r
-  where r.active = true
-    and r.application_mode = 'automatic'
-    and r.penalty_type = 'late_arrival'
-    and r.effective_from <= new.arrived_at
-    and (r.effective_until is null or r.effective_until >= new.arrived_at)
-    and (
-      r.target_scope = 'all'
-      or (r.target_scope = 'students' and new.person_type = 'student')
-      or (r.target_scope = 'staff' and new.person_type = 'staff')
-      or (r.target_scope = 'teacher' and new.person_type = 'teacher')
-    )
-    and coalesce(new.delay_minutes, 0) >= r.min_delay_minutes + r.tolerance_minutes
-    and (r.applies_after_time is null or local_arrival::time > r.applies_after_time)
-  order by r.priority asc, r.created_at desc
-  limit 1;
-
-  if selected_rule.id is not null then
-    insert into public.penalties (
-      attendance_id, person_id, rule_id, amount_fcfa, status, penalty_type, description
-    )
-    values (
-      new.id, new.person_id, selected_rule.id, selected_rule.amount_fcfa, 'pending',
-      selected_rule.penalty_type,
-      concat_ws(' — ', nullif(selected_rule.description, ''), 'Pénalité créée automatiquement à partir du pointage')
-    )
-    on conflict (attendance_id) where attendance_id is not null do nothing;
-  end if;
-
-  return new;
-end;
-$$;
-
+-- Reuse the existing secure attendance workflow instead of adding a second
+-- AFTER trigger that could race with private.after_attendance_insert().
+-- private.calculate_penalty() is called by both the server-side attendance guard
+-- and the existing AFTER trigger, so only automatic general rules are returned.
 drop trigger if exists trg_apply_automatic_penalty_for_attendance on public.attendance;
--- Handle late arrivals created directly or updated by a later attendance workflow.
--- The unique partial index and ON CONFLICT keep this idempotent.
-create trigger trg_apply_automatic_penalty_for_attendance
-after insert or update on public.attendance
-for each row execute function public.apply_automatic_penalty_for_attendance();
+drop function if exists public.apply_automatic_penalty_for_attendance();
+
+create or replace function private.calculate_penalty(
+  p_person_type text,
+  p_delay_minutes integer,
+  p_at timestamp with time zone default now()
+)
+returns table(rule_id uuid, amount_fcfa integer, blocks_access boolean)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select pr.id, pr.amount_fcfa, pr.blocks_access
+  from public.penalty_rules pr
+  where pr.active = true
+    and pr.application_mode = 'automatic'
+    and pr.penalty_type = 'late_arrival'
+    and (
+      pr.target_scope = 'all'
+      or (pr.target_scope = 'students' and p_person_type = 'student')
+      or (pr.target_scope = 'staff' and p_person_type = 'staff')
+      or (pr.target_scope = 'teacher' and p_person_type = 'teacher')
+    )
+    and p_delay_minutes >= pr.min_delay_minutes + pr.tolerance_minutes
+    and (pr.max_delay_minutes is null or p_delay_minutes <= pr.max_delay_minutes)
+    and (pr.effective_from is null or p_at >= pr.effective_from)
+    and (pr.effective_until is null or p_at <= pr.effective_until)
+    and (pr.applies_after_time is null or (p_at at time zone 'Africa/Porto-Novo')::time > pr.applies_after_time)
+  order by pr.priority asc, pr.created_at desc
+  limit 1
+$$;
