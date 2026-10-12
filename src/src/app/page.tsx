@@ -466,7 +466,7 @@ export default function Home() {
     setBusy(true); setError(""); setNotice("");
     const policy = classifyArrival(lateForm.person_type, lateForm.arrived_time);
     if (!policy.ok) {
-      setError(policy.error);
+      setError("error" in policy ? policy.error : "Impossible de classifier l’arrivée.");
       setBusy(false); return;
     }
     if (!policy.late) {
