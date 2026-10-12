@@ -21,7 +21,7 @@ Lors du contrôle de la base Supabase connectée, les colonnes `penalty_type` et
 - [ ] Une heure d'arrivée antérieure à l'heure prévue est refusée avant insertion.
 - [ ] Un montant vide, non numérique, décimal, nul, négatif ou supérieur à la capacité entière sûre est refusé.
 - [ ] Des heures mal formées sont refusées.
-- [ ] La date locale est utilisée pour composer l'heure prévue et l'heure constatée, y compris autour de minuit.
+- [ ] Le fuseau `Africa/Porto-Novo` est utilisé pour composer la date et l'heure prévues/constatées, y compris autour de minuit et si le navigateur est réglé sur un autre fuseau.
 - [ ] Un compte secrétariat ne peut pas autoriser l'accès du personnel.
 - [ ] Un compte non autorisé ne peut pas créer de retard manuel.
 - [ ] Une erreur après la création du retard laisse l'accès bloqué et affiche une explication exploitable.
