@@ -269,15 +269,11 @@ export default function Home() {
   };
   const [formationOptions, setFormationOptions] = useState<{ id: string; name: string; code: string }[]>([]);
   const [groupOptions, setGroupOptions] = useState<{ id: string; name: string; code: string }[]>([]);
-  const [penaltyOptions, setPenaltyOptions] = useState<{ id: string; person_id: string; amount_fcfa: number; status: string }[]>([]);
   const [profileOptions, setProfileOptions] = useState<{ id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]>([]);
   const [penaltyOptions, setPenaltyOptions] = useState<{ id: string; person_id: string; amount_fcfa: number; status: string; penalty_type?: string | null; description?: string | null }[]>([]);
   useEffect(() => {
     if (user && ["students", "groups", "subjects", "registrations"].includes(active)) {
       supabase.from("formations").select("id,name,code").order("name").then(({ data }) => setFormationOptions((data ?? []) as { id: string; name: string; code: string }[]));
-    }
-    if (user && active === "payments") {
-      supabase.from("penalties").select("id,person_id,amount_fcfa,status").order("calculated_at", { ascending: false }).limit(500).then(({ data }) => setPenaltyOptions((data ?? []) as { id: string; person_id: string; amount_fcfa: number; status: string }[]));
     }
     if (user && ["students", "registrations", "attendance", "payments"].includes(active)) {
       supabase.from("groups").select("id,name,code").order("name").then(({ data }) => setGroupOptions((data ?? []) as { id: string; name: string; code: string }[]));
