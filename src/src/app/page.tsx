@@ -448,8 +448,26 @@ export default function Home() {
       payload.receipt_number = null;
     }
     const { error: insertError } = await supabase.from(active).insert(payload);
-    if (insertError) setError(insertError.message);
-    else {
+    if (insertError) {
+      if (active === "payments" && insertError.message.includes("PENALTY_REQUIRED")) {
+        const type = String(payload.payment_type ?? "");
+        setError(
+          "La base a refusé l’enregistrement car elle a interprété l’opération comme un règlement de pénalité sans identifiant de pénalité. Aucun paiement n’a été confirmé. " +
+          (type === "ordinary"
+            ? "Vérifiez que « Paiement ordinaire » est sélectionné, puis réessayez."
+            : "Actualisez les pénalités et sélectionnez une pénalité encore en attente.") +
+          " Détail technique : " + insertError.message
+        );
+        if (type === "penalty") {
+          const { data: latestPenalties } = await supabase.from("penalties")
+            .select("id,person_id,amount_fcfa,status,penalty_type,description")
+            .in("status", ["pending", "unpaid", "due", "open"])
+            .gt("amount_fcfa", 0)
+            .order("created_at", { ascending: true });
+          setPenaltyOptions((latestPenalties ?? []) as { id: string; person_id: string; amount_fcfa: number; status: string; penalty_type?: string | null; description?: string | null }[]);
+        }
+      } else setError(insertError.message);
+    } else {
       setNotice(active === "payments" ? "Paiement enregistré en attente de validation. Aucun reçu n’a été émis." : "Enregistrement créé avec succès.");
       setCreateValues({}); setShowCreate(false);
       await loadRows(active); await loadCounts();
