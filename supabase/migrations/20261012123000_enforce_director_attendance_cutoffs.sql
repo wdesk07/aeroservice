@@ -1,5 +1,7 @@
 -- Enforce the Director's official arrival limits on manual secretariat entries.
 -- This migration is only committed to the feature branch; it is NOT applied to Supabase.
+-- Session attendance continues to use course_sessions.planned_start; daily cutoffs apply
+-- only to the session-less secretariat entry path below.
 create or replace function private.guard_attendance_insert()
 returns trigger
 language plpgsql
@@ -22,7 +24,7 @@ begin
 
   if new.person_id <> (select auth.uid())
      and not public.is_admin_actor()
-     and not public.has_any_role(ARRAY['SECRETARIAT','TEACHER','PEDAGOGY'])
+     and not public.has_any_role(ARRAY['SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE','DIRECTOR','PRE_ADMIN','TEACHER','PEDAGOGY'])
   then
     raise exception 'Unauthorized attendance actor';
   end if;
@@ -31,7 +33,7 @@ begin
   -- Person type, official schedule and cutoff are derived by the database.
   if new.session_id is null and new.source = 'secretariat' then
     if not public.is_admin_actor()
-       and not public.has_any_role(ARRAY['SECRETARIAT','PRE_ADMIN','DIRECTOR'])
+       and not public.has_any_role(ARRAY['SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE','PRE_ADMIN','DIRECTOR'])
     then
       raise exception 'Unauthorized manual attendance';
     end if;
