@@ -40,7 +40,7 @@ function classifyArrival(personType, arrivalTime, now = new Date()) {
     nominalTime: policy.nominalTime,
     toleranceMinutes: policy.toleranceMinutes,
     cutoffTime: policy.cutoffTime,
-    arrivalTime,
+    arrivalTime: effectiveArrivalTime,
     late,
     minutesAfterNominal: Math.max(0, arrivalMinutes - nominalMinutes),
     minutesAfterCutoff: Math.max(0, arrivalMinutes - cutoffMinutes),
