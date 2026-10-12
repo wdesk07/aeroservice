@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { validateManualLateArrival } from "../lib/attendance-validation";
 import { classifyArrival } from "../lib/attendance-policy";
+import { planLateArrivalSettlement } from "../lib/penalty-settlement";
 
 const supabase: SupabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -499,13 +500,14 @@ export default function Home() {
       setError("Le pointage est enregistré, mais la pénalité automatique n’a pas pu être vérifiée. Aucun accès n’est autorisé. Détail : " + automaticPenalty.error.message);
       await loadRows("attendance"); setBusy(false); return;
     }
-    let penaltyId = automaticPenalty.data?.id as string | undefined;
-    let paymentAmount = automaticPenalty.data ? Number(automaticPenalty.data.amount_fcfa) : amount;
-    if (automaticPenalty.data && paymentAmount !== amount) {
-      setError("Le pointage a créé une pénalité de " + paymentAmount.toLocaleString("fr-FR") + " FCFA selon la règle générale. Le montant saisi ne correspond pas : la pénalité reste à régler dans Comptabilité / Paiements.");
+    const settlementPlan = planLateArrivalSettlement(automaticPenalty.data, amount);
+    if (!settlementPlan.ok) {
+      setError(settlementPlan.error);
       await loadRows("attendance"); await loadRows("penalties"); setBusy(false); return;
     }
-    if (!penaltyId) {
+    let penaltyId = settlementPlan.penaltyId ?? undefined;
+    const paymentAmount = settlementPlan.paymentAmount;
+    if (settlementPlan.needsPenalty) {
       const penaltyResult = await supabase.from("penalties").insert({
         attendance_id: attendanceResult.data.id, person_id: lateForm.person_id,
         amount_fcfa: amount, status: "pending", penalty_type: "late_arrival"
