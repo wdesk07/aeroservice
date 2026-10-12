@@ -19,7 +19,7 @@ Depuis le dossier `src`, lancer `npm test`. La suite `tests/attendance-validatio
 - [x] Le formulaire de retard manuel utilise la limite de référence officielle et refuse une arrivée encore dans la tolérance côté interface.
 - [ ] La migration de garde serveur des retards manuels est préparée dans la branche, mais non appliquée à la base réelle.
 - [x] Une migration de branche prépare une table de présence quotidienne distincte et une RPC QR géolocalisée; elle n'est pas appliquée à Supabase.
-- [ ] L'interface QR n'est pas encore raccordée à la nouvelle RPC; les coordonnées/rayons des checkpoints doivent être configurés par l'administrateur avant activation.
+- [x] Une page dédiée `/presence/qr` est ajoutée sur la branche et appelle `qr_daily_checkin`; elle n'est pas encore validée de bout en bout. Les coordonnées/rayons du checkpoint sont préparés dans une migration non appliquée.
 - [ ] Le pointage de séance doit rester distinct et continuer à utiliser l'heure de début de la séance.
 - [x] Les 10 tests initiaux de validation et de limites horaires ont été déclarés exécutés avec succès dans la révision précédente.
 - [x] Trois tests de non-régression ont été ajoutés pour le règlement d'une pénalité, mais ils doivent encore être exécutés dans l'environnement local.
@@ -96,7 +96,7 @@ La branche ajoute une fonction de planification du règlement : si aucune pénal
 
 ## Pointage QR — audit du backend et critères
 
-Constat issu de l'inspection en lecture seule de la base Supabase Aéro Service : les tables `checkpoints` et `qr_tokens` et les fonctions `issue_qr_challenge` / `qr_checkin` existent déjà. Le flux actuel utilise un défi à durée courte (15 à 120 secondes, 45 secondes par défaut), consommé une seule fois. L'interface utilisateur QR n'est pas encore présente dans la branche de travail. Les deux points de contrôle actifs trouvés (`Entrée Aéro Service` et `Secrétariat`) n'ont pas de coordonnées GPS configurées ni de rayon défini; la vérification de distance ne peut donc pas protéger le QR permanent tant que ces paramètres ne sont pas renseignés et rendus obligatoires côté serveur.
+Constat issu de l'inspection en lecture seule de la base Supabase Aéro Service : les tables `checkpoints` et `qr_tokens` et les fonctions `issue_qr_challenge` / `qr_checkin` existent déjà. Le flux actuel utilise un défi à durée courte (15 à 120 secondes, 45 secondes par défaut), consommé une seule fois. Une page utilisateur QR quotidienne est maintenant présente sur la branche de travail, mais elle n'a pas encore été validée de bout en bout. Les deux points de contrôle actifs trouvés (`Entrée Aéro Service` et `Secrétariat`) n'ont pas de coordonnées GPS configurées ni de rayon défini; la vérification de distance ne peut donc pas protéger le QR permanent tant que ces paramètres ne sont pas renseignés et rendus obligatoires côté serveur.
 
 **Décision de sécurité à respecter :** un QR imprimé permanent et un défi QR temporaire renouvelé sont deux modes différents. Ne pas générer un défi depuis la page qui vient d'être ouverte par un scan, car cela permettrait à quelqu'un de lancer le pointage à distance sans avoir scanné un code affiché sur place. Avant d'implémenter l'interface, choisir explicitement entre :
 - QR dynamique affiché sur un écran au point de contrôle, renouvelé régulièrement et consommé une seule fois; ou
@@ -125,3 +125,15 @@ Constat issu de l'inspection en lecture seule de la base Supabase Aéro Service 
 ## Séparation QR quotidien / séance de cours
 
 La migration `20261012130000_daily_attendance_qr_policy.sql` crée une table distincte `daily_attendance` et une RPC `qr_daily_checkin`. Le pointage quotidien utilise l'heure locale `Africa/Porto-Novo`, un seuil de 08:30 pour le personnel/les enseignants et 09:15 comme fin de tolérance pour les apprenants. Le pointage de cours continue à utiliser `course_sessions.planned_start` via le flux QR existant. La RPC quotidienne refuse le pointage si le checkpoint n'a pas de coordonnées et de rayon valides, si la précision GPS dépasse 50 m, ou si la personne a déjà un pointage quotidien ce jour-là. La fonction est une préparation backend : l'interface QR n'est pas encore raccordée et la migration n'est pas appliquée.
+
+
+## Registre complet et détection des absences quotidiennes
+
+La migration de branche `20261012133000_daily_student_absence_closure.sql` prépare l'extension de `daily_attendance` pour le statut `absent` et une RPC idempotente `close_daily_student_absences()`. Après 09:16, elle marque absents les apprenants actifs inscrits dans `students` sans pointage quotidien et crée un événement d'audit. Elle ne modifie pas les données de production tant que la migration n'est pas appliquée.
+
+**Limites à traiter avant activation :**
+- La base de production consultée ne compte qu'un seul enregistrement dans `students`; le registre complet doit être fourni/importé avant que le bilan d'absences soit représentatif.
+- `pg_cron` n'est pas installé dans les extensions consultées. La RPC ne s'exécute donc pas automatiquement à ce stade : un planificateur sécurisé devra l'appeler après 09:16, ou une clôture administrateur contrôlée devra être prévue.
+- Le calendrier de présence (jours ouvrés, samedis, jours fériés et fermetures) n'est pas encore modélisé. Ne pas appliquer la migration ni marquer automatiquement les absences tant que les jours de présence attendus ne sont pas déterminés.
+- La migration est préparée sur la branche uniquement. Aucun SQL n'a été appliqué à la base réelle et aucun absent n'a été créé.
+- L'absence ne crée pas automatiquement une pénalité de 1 000 F CFA dans cette version; la règle confirmée de 1 000 F CFA concerne le retard, et l'absence doit conserver un statut distinct jusqu'à décision métier.
