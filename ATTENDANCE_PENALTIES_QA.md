@@ -18,9 +18,12 @@ Depuis le dossier `src`, lancer `npm test`. La suite `tests/attendance-validatio
 - [x] Tests unitaires des horaires officiels ajoutés : personnel 08:30/08:31, apprenants 09:15/09:16 et heure courante du Bénin.
 - [x] Le formulaire de retard manuel utilise la limite de référence officielle et refuse une arrivée encore dans la tolérance côté interface.
 - [ ] La migration de garde serveur des retards manuels est préparée dans la branche, mais non appliquée à la base réelle.
-- [ ] Le QR et le pointage de séance nécessitent encore un raccordement et une validation séparés.
-- [x] Les 10 tests unitaires (validation des retards et limites horaires) ont été exécutés localement et réussissent.
-- [ ] Confirmer le build Vercel après la dernière correction TypeScript (le build précédent a révélé une erreur de typage, corrigée dans la branche; le nouveau build est en cours).
+- [x] Une migration de branche prépare une table de présence quotidienne distincte et une RPC QR géolocalisée; elle n'est pas appliquée à Supabase.
+- [ ] L'interface QR n'est pas encore raccordée à la nouvelle RPC; les coordonnées/rayons des checkpoints doivent être configurés par l'administrateur avant activation.
+- [ ] Le pointage de séance doit rester distinct et continuer à utiliser l'heure de début de la séance.
+- [x] Les 10 tests initiaux de validation et de limites horaires ont été déclarés exécutés avec succès dans la révision précédente.
+- [x] Trois tests de non-régression ont été ajoutés pour le règlement d'une pénalité, mais ils doivent encore être exécutés dans l'environnement local.
+- [ ] Confirmer le build Vercel après les dernières corrections TypeScript.
 - [ ] Vérifier le build Next.js/TypeScript de la dernière révision.
 
 ### Phase 2 — tests d'intégration de la base
@@ -61,7 +64,9 @@ Tests de frontière à ajouter avant validation :
 - [ ] Intégrer ces règles au pointage serveur et les valider avant production.
 - [ ] Le fuseau `Africa/Porto-Novo` est appliqué même si le téléphone utilise un autre fuseau.
 - [ ] Les apprenants ne reçoivent pas la tolérance du personnel, et le personnel ne reçoit pas la tolérance des apprenants.
-- [ ] Les mêmes règles sont appliquées par le serveur pour le pointage QR et la saisie autorisée par le secrétariat.
+- [x] La saisie manuelle du secrétariat est protégée par une migration de branche qui vérifie les limites quotidiennes côté serveur.
+- [x] Une RPC séparée pour le QR quotidien calcule les limites côté serveur sans écraser l'heure de séance.
+- [ ] Raccorder l'interface QR à cette RPC, configurer les coordonnées GPS et tester les doublons avant activation.
 
 ## Règles automatiques de pénalité
 
@@ -75,6 +80,8 @@ Tests de frontière à ajouter avant validation :
 - [ ] Une erreur de lecture/création de pénalité ne débloque jamais l'accès par défaut.
 
 ## Paiement, régularisation et accès
+
+La branche ajoute une fonction de planification du règlement : si aucune pénalité automatique n'existe, le code doit d'abord créer une pénalité manuelle et récupérer son identifiant avant d'insérer un paiement de type `penalty`. Si une pénalité automatique existe, le montant saisi doit correspondre à son montant. Les migrations et tests restent à valider avant production.
 
 - [ ] Une pénalité automatique dont le montant diffère du montant présenté n'est pas encaissée automatiquement.
 - [ ] Un paiement de pénalité reprend le bénéficiaire et le montant issus de la base.
@@ -113,3 +120,8 @@ Constat issu de l'inspection en lecture seule de la base Supabase Aéro Service 
 - [ ] Aperçu de branche vérifié dans le navigateur.
 - [ ] Aucun secret ni identifiant d'accès ajouté au dépôt.
 - [ ] Validation explicite avant toute fusion et tout déploiement en production.
+
+
+## Séparation QR quotidien / séance de cours
+
+La migration `20261012130000_daily_attendance_qr_policy.sql` crée une table distincte `daily_attendance` et une RPC `qr_daily_checkin`. Le pointage quotidien utilise l'heure locale `Africa/Porto-Novo`, un seuil de 08:30 pour le personnel/les enseignants et 09:15 comme fin de tolérance pour les apprenants. Le pointage de cours continue à utiliser `course_sessions.planned_start` via le flux QR existant. La RPC quotidienne refuse le pointage si le checkpoint n'a pas de coordonnées et de rayon valides, si la précision GPS dépasse 50 m, ou si la personne a déjà un pointage quotidien ce jour-là. La fonction est une préparation backend : l'interface QR n'est pas encore raccordée et la migration n'est pas appliquée.
