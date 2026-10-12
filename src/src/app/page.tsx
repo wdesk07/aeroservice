@@ -514,9 +514,14 @@ export default function Home() {
       setError("Le retard est enregistré, mais la création du paiement a échoué. La pénalité reste à régler. L’accès reste bloqué. Détail : " + (paymentResult.error?.message || "paiement introuvable"));
       await loadRows("attendance"); await loadRows("penalties"); setBusy(false); return;
     }
-    const validationResult = await supabase.from("payments").update({ status: "validated" }).eq("id", paymentResult.data.id);
-    if (validationResult.error) {
-      setError("Le paiement est créé mais sa validation a échoué. La pénalité reste à régler et l’accès reste bloqué. Détail : " + validationResult.error.message);
+    const validationResult = await supabase.from("payments")
+      .update({ status: "validated" })
+      .eq("id", paymentResult.data.id)
+      .eq("status", "pending")
+      .select("id,status")
+      .maybeSingle();
+    if (validationResult.error || validationResult.data?.status !== "validated") {
+      setError("Le paiement a été créé, mais sa validation n’a pas été confirmée par la base. La pénalité reste à régler et l’accès reste bloqué. Détail : " + (validationResult.error?.message || "Aucune ligne validée n’a été retournée."));
       await loadRows("attendance"); await loadRows("penalties"); await loadRows("payments"); setBusy(false); return;
     }
     const accessResult = await supabase.from("attendance").update({
