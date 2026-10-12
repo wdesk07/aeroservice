@@ -256,10 +256,8 @@ export default function Home() {
       { name: "location_description", label: "Emplacement" }
     ],
     payments: [
-      { name: "payment_kind", label: "Type de règlement", type: "select", required: true, options: [{ label: "Paiement ordinaire", value: "ordinary" }, { label: "Règlement d’une pénalité", value: "penalty" }] },
-      { name: "penalty_id", label: "Pénalité à régler", type: "penalty" },
       { name: "payment_type", label: "Type de paiement", type: "select", required: true, options: [{ label: "Paiement ordinaire", value: "ordinary" }, { label: "Règlement d’une pénalité", value: "penalty" }] },
-      { name: "penalty_id", label: "Pénalité à régler", type: "penalty", required: true },
+      { name: "penalty_id", label: "Pénalité à régler", type: "penalty", required: false },
       { name: "person_id", label: "Bénéficiaire", type: "profile", required: true },
       { name: "amount_fcfa", label: "Montant (FCFA)", type: "number", required: true },
       { name: "method", label: "Mode de paiement", type: "select", required: true, options: [{ label: "Espèces", value: "cash" }, { label: "Mobile Money", value: "mobile_money" }, { label: "Autre", value: "other" }] },
@@ -322,8 +320,7 @@ export default function Home() {
     const payload: Record<string, unknown> = {};
     for (const field of createFields[active]) {
       const value = (createValues[field.name] ?? "").trim();
-      if (active === "payments" && field.name === "payment_kind") continue;
-      if (active === "payments" && field.name === "penalty_id" && (createValues.payment_kind ?? "ordinary") !== "penalty") continue;
+      if (active === "payments" && field.name === "penalty_id" && (createValues.payment_type ?? "ordinary") !== "penalty") continue;
       if (active === "students" && field.name === "id") payload.id = value;
       else if (field.type === "number") payload[field.name] = value ? Number(value) : null;
       else payload[field.name] = value || null;
