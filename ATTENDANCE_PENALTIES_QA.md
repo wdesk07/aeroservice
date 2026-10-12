@@ -52,8 +52,9 @@ Paramètres métier à appliquer dans le moteur de pointage, en heure locale du 
 
 Tests de frontière à ajouter avant validation :
 
-- [ ] Personnel : 08:30 à l'heure; 08:31 en retard.
-- [ ] Apprenant : 09:00, 09:15 tolérés; 09:16 en retard.
+- [x] Tests unitaires de frontière ajoutés pour le personnel : 08:30 à l'heure; 08:31 en retard.
+- [x] Tests unitaires de frontière ajoutés pour les apprenants : 09:00 et 09:15 tolérés; 09:16 en retard.
+- [ ] Intégrer ces règles au pointage serveur et les valider avant production.
 - [ ] Le fuseau `Africa/Porto-Novo` est appliqué même si le téléphone utilise un autre fuseau.
 - [ ] Les apprenants ne reçoivent pas la tolérance du personnel, et le personnel ne reçoit pas la tolérance des apprenants.
 - [ ] Les mêmes règles sont appliquées par le serveur pour le pointage QR et la saisie autorisée par le secrétariat.
