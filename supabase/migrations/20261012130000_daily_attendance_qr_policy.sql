@@ -19,6 +19,16 @@ create table if not exists public.daily_attendance (
   unique (person_id, local_date)
 );
 
+-- Extend the existing event-type allowlist for the new daily QR audit event.
+alter table public.attendance_events
+  drop constraint if exists attendance_events_event_type_check;
+alter table public.attendance_events
+  add constraint attendance_events_event_type_check
+  check (event_type in (
+    'pointage','late_detected','absence_detected','regularized',
+    'blocked','unblocked','correction','anomaly','daily_qr_checkin'
+  ));
+
 alter table public.daily_attendance enable row level security;
 
 drop policy if exists daily_attendance_read_self_or_admin on public.daily_attendance;
