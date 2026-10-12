@@ -19,6 +19,13 @@ test("apprenants : 09:00 et 09:15 inclus, 09:16 en retard", () => {
   assert.equal(ATTENDANCE_POLICY.student.toleranceMinutes, 15);
 });
 
+test("utilise l'heure du Bénin quand l'heure constatée est vide", () => {
+  const result = classifyArrival("student", "", new Date("2026-10-12T08:15:00.000Z"));
+  assert.equal(result.ok, true);
+  assert.equal(result.arrivalTime, "09:15");
+  assert.equal(result.late, false);
+});
+
 test("refuse les catégories et heures invalides", () => {
   assert.equal(classifyArrival("unknown", "09:00").ok, false);
   for (const time of ["9:00", "24:00", "12:60", "n'importe quoi"]) {
