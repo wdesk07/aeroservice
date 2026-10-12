@@ -465,7 +465,7 @@ export default function Home() {
     // Use the browser's local calendar date consistently with the local time inputs.
     // toISOString() is UTC and can select the wrong day around midnight in Benin.
     const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const timePattern = /^(?:[01]\\d|2[0-3]):[0-5]\\d$/;
+    const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
     const arrivedTime = lateForm.arrived_time || `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const rawAmount = Number(lateForm.amount_fcfa);
     if (!timePattern.test(lateForm.planned_time) || !timePattern.test(arrivedTime)) {
