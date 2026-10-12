@@ -68,6 +68,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [identityLoaded, setIdentityLoaded] = useState(false);
   const [active, setActive] = useState<ModuleKey>("dashboard");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -133,13 +134,16 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!user) { setProfile(null); setRoles([]); setCounts({}); setRows([]); return; }
-    void loadIdentity(user);
+    if (!user) { setIdentityLoaded(false); setProfile(null); setRoles([]); setCounts({}); setRows([]); return; }
+    setIdentityLoaded(false);
+    void loadIdentity(user).finally(() => setIdentityLoaded(true));
     void loadCounts();
   }, [user, loadIdentity, loadCounts]);
 
   useEffect(() => {
-    if (!user) return;
+    // Wait for the profile and role query to finish before enforcing navigation permissions.
+    // Otherwise the initial empty roles array falsely denies the dashboard on a fresh session.
+    if (!user || !identityLoaded) return;
     if (!canAccessModule(active, roles.map(role => role.code))) {
       setActive("dashboard"); setRows([]); setShowCreate(false);
       setError("Le menu demandé n’est pas autorisé pour votre rôle. Vous avez été redirigé vers votre espace.");
