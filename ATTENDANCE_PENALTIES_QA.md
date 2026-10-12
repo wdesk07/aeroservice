@@ -78,6 +78,7 @@ Tests de frontière à ajouter avant validation :
 
 - [ ] Une pénalité automatique dont le montant diffère du montant présenté n'est pas encaissée automatiquement.
 - [ ] Un paiement de pénalité reprend le bénéficiaire et le montant issus de la base.
+- [x] Une garde côté interface impose une pénalité existante avant la création du paiement; tests unitaires de non-régression ajoutés pour éviter PENALTY_REQUIRED si aucune pénalité automatique n'existe.
 - [ ] Un paiement ordinaire ne référence aucune pénalité.
 - [ ] Un paiement de pénalité exige une pénalité existante et payable.
 - [ ] Un paiement refusé ou en attente ne régularise pas le retard.
