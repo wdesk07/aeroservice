@@ -14,7 +14,16 @@ function classifyArrival(personType, arrivalTime, now = new Date()) {
   if (!category) {
     return { ok: false, error: "Catégorie de personne inconnue." };
   }
-  if (typeof arrivalTime !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime)) {
+  let effectiveArrivalTime = arrivalTime;
+  if (!effectiveArrivalTime) {
+    effectiveArrivalTime = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Africa/Porto-Novo",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(now);
+  }
+  if (typeof effectiveArrivalTime !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(effectiveArrivalTime)) {
     return { ok: false, error: "Saisissez une heure d’arrivée valide au format HH:mm." };
   }
 
