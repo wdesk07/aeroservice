@@ -15,6 +15,10 @@ Autre blocage constaté : la fonction `private.guard_attendance_insert()` actuel
 Depuis le dossier `src`, lancer `npm test`. La suite `tests/attendance-validation.test.mjs` vérifie le calcul du retard, le fuseau du Bénin, les heures mal formées et les montants invalides. Elle ne se connecte pas à Supabase et ne crée aucune présence, pénalité ou paiement.
 
 - [x] Tests unitaires de validation des retards ajoutés.
+- [x] Tests unitaires des horaires officiels ajoutés : personnel 08:30/08:31, apprenants 09:15/09:16 et heure courante du Bénin.
+- [x] Le formulaire de retard manuel utilise la limite de référence officielle et refuse une arrivée encore dans la tolérance côté interface.
+- [ ] La migration de garde serveur des retards manuels est préparée dans la branche, mais non appliquée à la base réelle.
+- [ ] Le QR et le pointage de séance nécessitent encore un raccordement et une validation séparés.
 - [x] Les 5 scénarios unitaires ont été exécutés localement et réussissent.
 - [ ] Exécuter également `npm test` dans l'environnement de build du dépôt et confirmer le résultat.
 - [ ] Vérifier le build Next.js/TypeScript de la dernière révision.
