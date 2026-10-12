@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { validateManualLateArrival } from "../lib/attendance-validation";
 
 const supabase: SupabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -461,31 +462,14 @@ export default function Home() {
       return;
     }
     setBusy(true); setError(""); setNotice("");
-    const now = new Date();
-    // Attendance times are defined in Benin time, independently of the device timezone.
-    const beninParts = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Porto-Novo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
-    const beninPart = (type: string) => beninParts.find(part => part.type === type)?.value ?? "";
-    const day = `${beninPart("year")}-${beninPart("month")}-${beninPart("day")}`;
-    const beninClock = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
-    const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-    const arrivedTime = lateForm.arrived_time || beninClock;
-    const rawAmount = Number(lateForm.amount_fcfa);
-    if (!timePattern.test(lateForm.planned_time) || !timePattern.test(arrivedTime)) {
-      setError("Vérifiez l’heure prévue et l’heure d’arrivée.");
+    const validation = validateManualLateArrival(
+      lateForm.planned_time, lateForm.arrived_time, lateForm.amount_fcfa
+    );
+    if (!validation.ok) {
+      setError(validation.error);
       setBusy(false); return;
     }
-    if (!Number.isSafeInteger(rawAmount) || rawAmount <= 0) {
-      setError("Le montant du règlement doit être un nombre entier de FCFA supérieur à zéro.");
-      setBusy(false); return;
-    }
-    const plannedAt = new Date(`${day}T${lateForm.planned_time}:00+01:00`);
-    const arrivedAt = new Date(`${day}T${arrivedTime}:00+01:00`);
-    const delayMinutes = Math.floor((arrivedAt.getTime() - plannedAt.getTime()) / 60000);
-    if (!Number.isFinite(delayMinutes) || delayMinutes <= 0) {
-      setError("L’heure d’arrivée doit être postérieure à l’heure prévue pour enregistrer un retard.");
-      setBusy(false); return;
-    }
-    const amount = rawAmount;
+    const { plannedAt, arrivedAt, delayMinutes, amount } = validation;
     const personLabel = lateForm.person_type === "staff" ? "Personnel" : "Apprenant";
     const note = `${personLabel} — retard ${delayMinutes} min. Montant payé : ${amount.toLocaleString("fr-FR")} FCFA. Accès autorisé par le secrétariat après validation du règlement.${lateForm.reason.trim() ? " Motif : " + lateForm.reason.trim() : ""}`;
     const attendanceResult = await supabase.from("attendance").insert({
