@@ -38,7 +38,7 @@ const metrics = [
   { label: "Inscriptions", table: "registrations", icon: "▣", foot: "Demandes enregistrées" }
 ];
 const pretty = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-const statusClass = (v: string) => ["active", "approved", "success", "validated", "present", "paid"].includes(v.toLowerCase()) ? "active" : ["pending", "submitted", "pre_review"].includes(v.toLowerCase()) ? "pending" : ["late", "regularized_late"].includes(v.toLowerCase()) ? "late" : ["suspended", "rejected", "inactive", "absent"].includes(v.toLowerCase()) ? "rejected" : "";
+const statusClass = (v: string) => ["active", "approved", "success", "validated", "present", "paid", "on_time"].includes(v.toLowerCase()) ? "active" : ["pending", "submitted", "pre_review", "regularized_late"].includes(v.toLowerCase()) ? (v.toLowerCase() === "regularized_late" ? "regularized_late" : "pending") : ["late", "suspended", "rejected", "inactive", "absent"].includes(v.toLowerCase()) ? "rejected" : "";
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]?.toUpperCase()).join("") || "AS";
 const escapeHtml = (value: unknown) => String(value ?? "—").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\x27/g,"&#39;");
 
