@@ -108,6 +108,7 @@ begin
      or v_checkpoint.radius_m is null or v_checkpoint.radius_m <= 0
   then raise exception 'CHECKPOINT_GEOFENCE_NOT_CONFIGURED'; end if;
 
+  -- Haversine distance: cosine terms use both latitudes (never longitude).
   v_distance := 6371000 * 2 * asin(sqrt(
     power(sin(radians(p_lat - v_checkpoint.latitude) / 2), 2)
     + cos(radians(v_checkpoint.latitude)) * cos(radians(p_lat))
