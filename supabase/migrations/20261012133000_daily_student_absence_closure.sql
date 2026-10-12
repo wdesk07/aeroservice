@@ -71,7 +71,8 @@ begin
 
   get diagnostics v_inserted = row_count;
 
-  -- Preserve an audit event for each absence newly recorded in this run.
+  -- Preserve exactly one audit event per absence. This also repairs a missing
+  -- audit event on a prior run without duplicating events already recorded.
   -- Event rows are tied to the daily record through metadata; attendance_id
   -- is nullable in the existing production schema.
   insert into public.attendance_events (
@@ -90,7 +91,6 @@ begin
   from public.daily_attendance da
   where da.local_date = v_date
     and da.status = 'absent'
-    and da.created_at >= v_now - interval '2 minutes'
     and da.person_type = 'student'
     and not exists (
       select 1 from public.attendance_events ae
