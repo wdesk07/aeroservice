@@ -494,32 +494,30 @@ export default function Home() {
     if (!penaltyId) {
       const penaltyResult = await supabase.from("penalties").insert({
         attendance_id: attendanceResult.data.id, person_id: lateForm.person_id,
-        amount_fcfa: amount, status: "paid", penalty_type: "late_arrival"
+        amount_fcfa: amount, status: "pending", penalty_type: "late_arrival"
       }).select("id").single();
       if (penaltyResult.error || !penaltyResult.data) {
         setError("Le retard est enregistré, mais le dossier de règlement n’a pas pu être créé. L’accès reste bloqué. Détail : " + (penaltyResult.error?.message || "erreur inconnue"));
         await loadRows("attendance"); setBusy(false); return;
       }
       penaltyId = penaltyResult.data.id;
-    } else {
-      const { error: markPaidError } = await supabase.from("penalties").update({ status: "paid" }).eq("id", penaltyId);
-      if (markPaidError) {
-        setError("La pénalité automatique est créée, mais son règlement n’a pas pu être validé. L’accès reste bloqué. Détail : " + markPaidError.message);
-        await loadRows("attendance"); setBusy(false); return;
-      }
     }
     const paymentResult = await supabase.from("payments").insert({
+      payment_type: "penalty", payment_category: "penalty",
       penalty_id: penaltyId, person_id: lateForm.person_id,
       amount_fcfa: paymentAmount, method: lateForm.method,
       provider: lateForm.provider.trim() || null,
       transaction_reference: lateForm.transaction_reference.trim() || null,
-      status: "validated", received_at: arrivedAt.toISOString(), received_by: user.id,
-      validated_at: new Date().toISOString(), validated_by: user.id
-    });
-    if (paymentResult.error) {
-      await supabase.from("penalties").update({ status: "pending" }).eq("id", penaltyId);
-      setError("Le retard et le montant sont enregistrés, mais la validation du paiement a échoué. L’accès reste bloqué. Détail : " + paymentResult.error.message);
-      await loadRows("attendance"); setBusy(false); return;
+      status: "pending", received_at: arrivedAt.toISOString(), received_by: user.id
+    }).select("id").single();
+    if (paymentResult.error || !paymentResult.data) {
+      setError("Le retard est enregistré, mais la création du paiement a échoué. La pénalité reste à régler. L’accès reste bloqué. Détail : " + (paymentResult.error?.message || "paiement introuvable"));
+      await loadRows("attendance"); await loadRows("penalties"); setBusy(false); return;
+    }
+    const validationResult = await supabase.from("payments").update({ status: "validated" }).eq("id", paymentResult.data.id);
+    if (validationResult.error) {
+      setError("Le paiement est créé mais sa validation a échoué. La pénalité reste à régler et l’accès reste bloqué. Détail : " + validationResult.error.message);
+      await loadRows("attendance"); await loadRows("penalties"); await loadRows("payments"); setBusy(false); return;
     }
     const accessResult = await supabase.from("attendance").update({
       status: "regularized_late", access_blocked: false,
