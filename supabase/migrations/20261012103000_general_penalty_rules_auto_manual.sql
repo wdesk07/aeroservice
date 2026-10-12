@@ -72,6 +72,8 @@ end;
 $$;
 
 drop trigger if exists trg_apply_automatic_penalty_for_attendance on public.attendance;
+-- Handle late arrivals created directly or updated by a later attendance workflow.
+-- The unique partial index and ON CONFLICT keep this idempotent.
 create trigger trg_apply_automatic_penalty_for_attendance
-after insert on public.attendance
+after insert or update on public.attendance
 for each row execute function public.apply_automatic_penalty_for_attendance();
