@@ -9,6 +9,9 @@ function planLateArrivalSettlement(automaticPenalty, enteredAmount) {
     if (!penaltyId || !Number.isSafeInteger(penaltyAmount) || penaltyAmount <= 0) {
       return { ok: false, error: "La pénalité automatique est incomplète; aucun paiement n'a été créé." };
     }
+    if (automaticPenalty.status !== "pending") {
+      return { ok: false, error: "Cette pénalité n'est pas payable (elle est déjà réglée, annulée ou exonérée)." };
+    }
     if (penaltyAmount !== amount) {
       return { ok: false, error: "Le montant saisi ne correspond pas à la pénalité calculée (" + penaltyAmount + " FCFA)." };
     }
