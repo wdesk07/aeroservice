@@ -19,6 +19,30 @@ create table if not exists public.daily_attendance (
   unique (person_id, local_date)
 );
 
+-- Configure the physical main entrance using the coordinates confirmed by the user.
+-- 50 m is a provisional geofence radius and must be field-tested before migration.
+update public.checkpoints
+set latitude = 6.365841,
+    longitude = 2.423445,
+    radius_m = 50
+where id = 'a7c6e512-0f06-447e-b57b-8831d11f7ae9'::uuid
+  and code = 'AERO_ENTRANCE';
+
+do $check_checkpoint$
+begin
+  if not exists (
+    select 1 from public.checkpoints
+    where id = 'a7c6e512-0f06-447e-b57b-8831d11f7ae9'::uuid
+      and code = 'AERO_ENTRANCE'
+      and latitude = 6.365841
+      and longitude = 2.423445
+      and radius_m = 50
+  ) then
+    raise exception 'AERO_ENTRANCE_CHECKPOINT_NOT_CONFIGURED';
+  end if;
+end;
+$check_checkpoint$;
+
 -- Extend the existing event-type allowlist for the new daily QR audit event.
 alter table public.attendance_events
   drop constraint if exists attendance_events_event_type_check;
