@@ -134,9 +134,15 @@ begin
 
   v_local := v_now at time zone 'Africa/Porto-Novo';
   v_local_date := v_local::date;
-  v_status := case when v_local::time <= v_cutoff then 'on_time' else 'late' end;
-  v_minutes := case when v_local::time <= v_cutoff then 0
-    else floor(extract(epoch from (v_local::time - v_cutoff)) / 60)::integer end;
+  -- Student tolerance includes the entire 09:15 minute; lateness starts at 09:16.
+  -- Staff have no tolerance after 08:30:00.
+  v_status := case
+    when v_person_type = 'student' and v_local::time < time '09:16' then 'on_time'
+    when v_person_type = 'staff' and v_local::time <= time '08:30' then 'on_time'
+    else 'late'
+  end;
+  v_minutes := case when v_status = 'on_time' then 0
+    else greatest(0, floor(extract(epoch from (v_local::time - v_cutoff)) / 60)::integer) end;
 
   insert into public.daily_attendance(
     person_id, local_date, person_type, nominal_time, cutoff_time, arrived_at,
