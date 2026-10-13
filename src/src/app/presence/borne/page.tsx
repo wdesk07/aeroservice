@@ -144,8 +144,15 @@ export default function PresenceKioskPage() {
       const { data: authPayload, error: authError } = await supabase.functions.invoke("kiosk-auth", {
         body: { identifier: identifier.trim(), password }
       });
+      let failurePayload: { error?: string } | null = authPayload;
+      if (authError) {
+        const context = (authError as unknown as { context?: unknown }).context;
+        if (context instanceof Response) {
+          try { failurePayload = await context.clone().json(); } catch { failurePayload = null; }
+        }
+      }
       if (authError || !authPayload?.access_token || !authPayload?.refresh_token) {
-        const detail = authPayload?.error || authError?.message || "Invalid login credentials";
+        const detail = failurePayload?.error || (authError ? "INVALID_CREDENTIALS" : "SERVICE_UNAVAILABLE");
         throw new Error(detail);
       }
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
