@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import QRCode from "qrcode";
+import { BrowserQRCodeReader } from "@zxing/browser";
 import { validateManualLateArrival } from "../lib/attendance-validation";
 import { classifyArrival } from "../lib/attendance-policy";
 import { planLateArrivalSettlement } from "../lib/penalty-settlement";
@@ -117,6 +118,8 @@ export default function Home() {
   const [entranceQrDataUrl, setEntranceQrDataUrl] = useState("");
   const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerControlsRef = useRef<{ stop: () => void } | null>(null);
+  const scannerProcessingRef = useRef(false);
 
   const loadIdentity = useCallback(async (current: User) => {
     const [{ data: p }, { data: r }] = await Promise.all([
@@ -289,46 +292,55 @@ export default function Home() {
   }
 
   async function startQrScanner() {
-    setCameraError(""); setScanResult(null);
+    setCameraError(""); setScanResult(null); scannerProcessingRef.current = false;
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setCameraError("La caméra n’est pas disponible dans ce navigateur. Ouvrez la plateforme avec Chrome récent en HTTPS et autorisez la caméra."); return;
+      setCameraError("La caméra n’est pas disponible. Ouvrez la plateforme en HTTPS et autorisez la caméra."); return;
     }
-    const Detector = (window as any).BarcodeDetector;
-    if (!Detector) {
-      setCameraError("Ce navigateur ne prend pas en charge le scan QR natif. Essayez Chrome à jour sur téléphone, ou utilisez un navigateur compatible."); return;
+    if (!scannerVideoRef.current) {
+      setCameraError("La zone de caméra n’est pas prête. Fermez puis rouvrez le scanner."); return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-      scannerStreamRef.current = stream;
-      if (scannerVideoRef.current) { scannerVideoRef.current.srcObject = stream; await scannerVideoRef.current.play(); }
+      const reader = new BrowserQRCodeReader();
+      const video = scannerVideoRef.current;
+      const controls = await reader.decodeFromVideoDevice(undefined, video, (result, _error, scanControls) => {
+        if (!result || scannerProcessingRef.current) return;
+        scannerProcessingRef.current = true;
+        const raw = String(result.getText() || "").trim();
+        scanControls.stop();
+        scannerControlsRef.current = null;
+        scannerStreamRef.current = null;
+        setScannerActive(false);
+        if (video.srcObject instanceof MediaStream) {
+          (video.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+          video.srcObject = null;
+        }
+        const accepted = raw === "AERO_SERVICE:AERO_ENTRANCE" || raw === "a7c6e512-0f06-447e-b57b-8831d11f7ae9" || raw.includes("AERO_ENTRANCE");
+        if (!accepted) {
+          scannerProcessingRef.current = false;
+          setCameraError("Ce QR code ne correspond pas au point de contrôle Aéro Service. Scannez le QR officiel de l’entrée.");
+          return;
+        }
+        void submitQrCheckin();
+      });
+      scannerControlsRef.current = controls;
       setScannerActive(true);
-      const detector = new Detector({ formats: ["qr_code"] });
-      const scanLoop = async () => {
-        if (!scannerStreamRef.current || !scannerVideoRef.current) return;
-        try {
-          const codes = await detector.detect(scannerVideoRef.current);
-          const raw = String(codes?.[0]?.rawValue || "").trim();
-          if (raw) {
-            const accepted = raw === "AERO_SERVICE:AERO_ENTRANCE" || raw === "a7c6e512-0f06-447e-b57b-8831d11f7ae9" || raw.includes("AERO_ENTRANCE");
-            stopQrScanner();
-            if (!accepted) { setCameraError("Ce QR code ne correspond pas au point de contrôle Aéro Service. Scannez le QR officiel de l’entrée."); return; }
-            await submitQrCheckin();
-            return;
-          }
-        } catch { /* Keep scanning until a valid QR is detected. */ }
-        if (scannerStreamRef.current) window.setTimeout(() => { void scanLoop(); }, 220);
-      };
-      void scanLoop();
-    } catch (e) {
-      setCameraError("Impossible d’ouvrir la caméra. Autorisez son utilisation dans le navigateur puis réessayez.");
+    } catch {
+      setCameraError("Impossible d’ouvrir la caméra. Autorisez son utilisation dans les paramètres du navigateur puis réessayez.");
       stopQrScanner();
     }
   }
 
   function stopQrScanner() {
+    scannerControlsRef.current?.stop();
+    scannerControlsRef.current = null;
     scannerStreamRef.current?.getTracks().forEach(track => track.stop());
     scannerStreamRef.current = null;
-    if (scannerVideoRef.current) scannerVideoRef.current.srcObject = null;
+    if (scannerVideoRef.current) {
+      if (scannerVideoRef.current.srcObject instanceof MediaStream) {
+        (scannerVideoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+      }
+      scannerVideoRef.current.srcObject = null;
+    }
     setScannerActive(false);
   }
 
@@ -361,6 +373,7 @@ export default function Home() {
   }
 
   useEffect(() => () => {
+    scannerControlsRef.current?.stop();
     scannerStreamRef.current?.getTracks().forEach(track => track.stop());
   }, []);
 
