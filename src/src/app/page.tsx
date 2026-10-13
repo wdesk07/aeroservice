@@ -89,7 +89,7 @@ export default function Home() {
   const [operatingDay, setOperatingDay] = useState<Record<string, any> | null>(null);
   const [receiptPayment, setReceiptPayment] = useState<Record<string, unknown> | null>(null);
   const [counts, setCounts] = useState<Record<string, number | null>>({});
-  const [financeTotals, setFinanceTotals] = useState<{today:number|null;month:number|null;year:number|null;pending:number|null;count:number|null}>({today:null,month:null,year:null,pending:null,count:null});
+  const [financeTotals, setFinanceTotals] = useState<{today:number|null;month:number|null;year:number|null;pending:number|null;count:number|null;expensesToday:number|null;expensesMonth:number|null;expensesYear:number|null}>({today:null,month:null,year:null,pending:null,count:null,expensesToday:null,expensesMonth:null,expensesYear:null});
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -141,37 +141,52 @@ export default function Home() {
   }, [roles]);
 
   useEffect(() => {
-    if (!user || !roles.some(role => ["ACCOUNTING", "FINANCE"].includes(role.code.toUpperCase()))) {
-      setFinanceTotals({today:null,month:null,year:null,pending:null,count:null});
+    const hasFinanceAccess = roles.some(role => ["ACCOUNTING","FINANCE","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE"].includes(role.code.toUpperCase()));
+    if (!user || !hasFinanceAccess) {
+      setFinanceTotals({today:null,month:null,year:null,pending:null,count:null,expensesToday:null,expensesMonth:null,expensesYear:null});
       return;
     }
     let cancelled = false;
+    const localDate = (value: string | Date) => new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Porto-Novo", year: "numeric", month: "2-digit", day: "2-digit"
+    }).format(new Date(value));
     const loadFinanceTotals = async () => {
-      const { data, error: paymentsError } = await supabase
-        .from("payments")
-        .select("amount_fcfa,received_at,status")
-        .limit(5000);
+      const [paymentsResult, expensesResult] = await Promise.all([
+        supabase.from("payments").select("amount_fcfa,received_at,status").limit(5000),
+        supabase.from("expenses").select("amount_fcfa,expense_date,status").limit(5000)
+      ]);
       if (cancelled) return;
-      if (paymentsError || !data) {
-        setFinanceTotals({today:null,month:null,year:null,pending:null,count:null});
-        return;
-      }
-      const now = new Date();
-      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      const startYear = new Date(now.getFullYear(), 0, 1).getTime();
-      const rows = data as {amount_fcfa:number|null;received_at:string|null;status:string|null}[];
-      const validated = rows.filter(row => ["validated", "paid", "success"].includes((row.status ?? "").toLowerCase()));
-      const sumSince = (start:number) => validated.reduce((sum,row) => {
-        const timestamp = row.received_at ? new Date(row.received_at).getTime() : NaN;
-        return Number.isFinite(timestamp) && timestamp >= start && timestamp <= now.getTime() ? sum + Number(row.amount_fcfa || 0) : sum;
-      }, 0);
+      const today = localDate(new Date());
+      const month = today.slice(0,7);
+      const year = today.slice(0,4);
+      const payments = !paymentsResult.error && paymentsResult.data
+        ? paymentsResult.data as {amount_fcfa:number|null;received_at:string|null;status:string|null}[]
+        : null;
+      const expenses = !expensesResult.error && expensesResult.data
+        ? expensesResult.data as {amount_fcfa:number|null;expense_date:string|null;status:string|null}[]
+        : null;
+      const validated = (payments ?? []).filter(row => ["validated","paid","success"].includes((row.status ?? "").toLowerCase()));
+      const sumPayments = (period:"today"|"month"|"year") => validated.reduce((sum,row) => {
+        if (!row.received_at) return sum;
+        const date = localDate(row.received_at);
+        const matches = period === "today" ? date === today : period === "month" ? date.slice(0,7) === month : date.slice(0,4) === year;
+        return matches ? sum + Number(row.amount_fcfa || 0) : sum;
+      },0);
+      const recordedExpenses = (expenses ?? []).filter(row => ["recorded","approved"].includes((row.status ?? "").toLowerCase()));
+      const sumExpenses = (period:"today"|"month"|"year") => recordedExpenses.reduce((sum,row) => {
+        const date = row.expense_date ?? "";
+        const matches = period === "today" ? date === today : period === "month" ? date.slice(0,7) === month : date.slice(0,4) === year;
+        return matches ? sum + Number(row.amount_fcfa || 0) : sum;
+      },0);
       setFinanceTotals({
-        today: sumSince(startToday),
-        month: sumSince(startMonth),
-        year: sumSince(startYear),
-        pending: rows.filter(row => ["pending", "submitted", "pre_review"].includes((row.status ?? "").toLowerCase())).length,
-        count: validated.length
+        today: payments ? sumPayments("today") : null,
+        month: payments ? sumPayments("month") : null,
+        year: payments ? sumPayments("year") : null,
+        pending: payments ? payments.filter(row => ["pending","submitted","pre_review"].includes((row.status ?? "").toLowerCase())).length : null,
+        count: payments ? validated.length : null,
+        expensesToday: expenses ? sumExpenses("today") : null,
+        expensesMonth: expenses ? sumExpenses("month") : null,
+        expensesYear: expenses ? sumExpenses("year") : null
       });
     };
     void loadFinanceTotals();
@@ -826,8 +841,8 @@ export default function Home() {
               <p className="stat-foot" style={{marginTop:12}}>Les boutons enregistrent l’heure réelle et le compte responsable. Les contrôles automatiques des présences et des absences restent distincts et doivent être activés côté serveur.</p>
             </div>
           </div>}
-          {!isLearner && roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) && <div className="stats-grid">
-            {[{label:"Recettes aujourd’hui",value:financeTotals.today,icon:"₣",foot:"Paiements validés · FCFA"},{label:"Recettes du mois",value:financeTotals.month,icon:"▦",foot:"Depuis le 1er du mois · FCFA"},{label:"Recettes de l’année",value:financeTotals.year,icon:"↗",foot:"Depuis le 1er janvier · FCFA"},{label:"Paiements en attente",value:financeTotals.pending,icon:"◷",foot:"À contrôler / valider"}].map(item=><div className="stat-card" key={item.label}><div className="stat-top"><span>{item.label}</span><span className="stat-icon">{item.icon}</span></div><div className="stat-number">{item.value===null?"—":item.value.toLocaleString("fr-FR")}</div><div className="stat-foot">{item.foot}</div></div>)}
+          {!isLearner && roleCodes.some(code => ["ACCOUNTING","FINANCE","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE"].includes(code)) && <div className="stats-grid">
+            {[{label:"Recettes aujourd’hui",value:financeTotals.today,icon:"₣",foot:"Paiements validés · FCFA"},{label:"Recettes du mois",value:financeTotals.month,icon:"▦",foot:"Depuis le 1er du mois · FCFA"},{label:"Recettes de l’année",value:financeTotals.year,icon:"↗",foot:"Depuis le 1er janvier · FCFA"},{label:"Dépenses aujourd’hui",value:financeTotals.expensesToday,icon:"↘",foot:"Dépenses enregistrées · FCFA"},{label:"Dépenses du mois",value:financeTotals.expensesMonth,icon:"↘",foot:"Depuis le 1er du mois · FCFA"},{label:"Dépenses de l’année",value:financeTotals.expensesYear,icon:"↘",foot:"Depuis le 1er janvier · FCFA"},{label:"Solde estimé du mois",value:financeTotals.month===null||financeTotals.expensesMonth===null?null:financeTotals.month-financeTotals.expensesMonth,icon:"=",foot:"Recettes validées − dépenses · FCFA"},{label:"Paiements en attente",value:financeTotals.pending,icon:"◷",foot:"À contrôler / valider"}].map(item=><div className="stat-card" key={item.label}><div className="stat-top"><span>{item.label}</span><span className="stat-icon">{item.icon}</span></div><div className="stat-number">{item.value===null?"—":item.value.toLocaleString("fr-FR")}</div><div className="stat-foot">{item.foot}</div></div>)}
           </div>}
           {!isLearner && !roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) && (isAdmin || isSecretary || roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE"].includes(code))) && <div className="stats-grid">{metrics.map(metric=><div className="stat-card" key={metric.table}><div className="stat-top"><span>{metric.label}</span><span className="stat-icon">{metric.icon}</span></div><div className="stat-number">{counts[metric.table]===undefined?"…":counts[metric.table]===null?"—":counts[metric.table]}</div><div className="stat-foot">{metric.foot}</div></div>)}</div>}
           {!isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Accès rapide</div><div className="panel-desc">Retrouvez les espaces de travail les plus utilisés.</div></div></div><div className="panel-body"><div className="quick-grid">{[
