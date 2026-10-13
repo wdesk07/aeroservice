@@ -42,7 +42,7 @@ begin
        ]) then
       raise exception 'UNAUTHORIZED_ABSENCE_CLOSURE';
     end if;
-  elsif coalesce(auth.role(), '') <> 'service_role' then
+  elsif coalesce(auth.role(), '') <> 'service_role' and session_user not in ('postgres', 'supabase_admin') then
     raise exception 'SERVICE_ROLE_REQUIRED';
   end if;
 
