@@ -938,17 +938,17 @@ export default function Home() {
           {canSeeOperatingDay && <div className="panel" style={{marginBottom:18}}>
             <div className="panel-head">
               <div><div className="panel-title">Ouverture et fermeture d’Aéro Service</div><div className="panel-desc">Heure de référence : Bénin (Africa/Porto-Novo) · Ouverture cible 08 h 30 · Début des cours 09 h 00 · Fin des cours 19 h 00 · Fermeture cible 20 h 30</div></div>
-              <span className={"pill " + (operatingDay.status === "open" ? "active" : "pending")}>{operatingDay.status === "open" ? "Établissement ouvert" : operatingDay.status === "closed" ? "Établissement fermé" : "Journée non ouverte"}</span>
+              <span className={"pill " + ((operatingDay?.status ?? "not_opened") === "open" ? "active" : "pending")}>{(operatingDay?.status ?? "not_opened") === "open" ? "Établissement ouvert" : (operatingDay?.status ?? "not_opened") === "closed" ? "Établissement fermé" : "Journée non ouverte"}</span>
             </div>
             <div className="panel-body">
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:14}}>
-                <div><div className="stat-foot">Date locale</div><strong>{String(operatingDay.business_date || "—")}</strong></div>
-                <div><div className="stat-foot">Ouverture enregistrée</div><strong>{operatingDay.opened_at ? new Date(operatingDay.opened_at).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Porto-Novo"}) : "Non enregistrée"}</strong></div>
-                <div><div className="stat-foot">Fermeture enregistrée</div><strong>{operatingDay.closed_at ? new Date(operatingDay.closed_at).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Porto-Novo"}) : "En attente"}</strong></div>
+                <div><div className="stat-foot">Date locale</div><strong>{String((operatingDay?.business_date ?? "—") || "—")}</strong></div>
+                <div><div className="stat-foot">Ouverture enregistrée</div><strong>{operatingDay?.opened_at ? new Date(operatingDay?.opened_at).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Porto-Novo"}) : "Non enregistrée"}</strong></div>
+                <div><div className="stat-foot">Fermeture enregistrée</div><strong>{operatingDay?.closed_at ? new Date(operatingDay?.closed_at).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Porto-Novo"}) : "En attente"}</strong></div>
               </div>
               {canOperateDay ? <div className="form-actions">
-                <button className="btn btn-primary" disabled={busy || operatingDay.status === "open" || operatingDay.status === "closed"} onClick={() => void operateEstablishment("open")}>Ouvrir Aéro Service</button>
-                <button className="btn" disabled={busy || operatingDay.status !== "open"} onClick={() => void operateEstablishment("close")}>Fermer Aéro Service</button>
+                <button className="btn btn-primary" disabled={busy || (operatingDay?.status ?? "not_opened") === "open" || (operatingDay?.status ?? "not_opened") === "closed"} onClick={() => void operateEstablishment("open")}>Ouvrir Aéro Service</button>
+                <button className="btn" disabled={busy || (operatingDay?.status ?? "not_opened") !== "open"} onClick={() => void operateEstablishment("close")}>Fermer Aéro Service</button>
                 <button className="btn btn-quiet" disabled={busy} onClick={() => void refreshOperatingDay()}>Actualiser le statut</button>
               </div> : <div className="stat-foot">Consultation uniquement. L’ouverture et la fermeture sont réservées à la Direction et au Secrétariat autorisé.</div>}
               <p className="stat-foot" style={{marginTop:12}}>Les boutons enregistrent l’heure réelle et le compte responsable. Les contrôles automatiques des présences et des absences restent distincts et doivent être activés côté serveur.</p>
