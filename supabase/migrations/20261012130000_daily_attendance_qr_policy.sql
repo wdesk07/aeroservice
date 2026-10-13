@@ -19,24 +19,15 @@ create table if not exists public.daily_attendance (
   unique (person_id, local_date)
 );
 
--- Configure the physical main entrance using the coordinates confirmed by the user.
--- 50 m is a provisional geofence radius and must be field-tested before migration.
-update public.checkpoints
-set latitude = 6.365841,
-    longitude = 2.423445,
-    radius_m = 50
-where id = 'a7c6e512-0f06-447e-b57b-8831d11f7ae9'::uuid
-  and code = 'AERO_ENTRANCE';
-
+-- The checkpoint must be configured from the physical entrance by the Director.
+-- Do not ship approximate coordinates: the app exposes a secure one-time GPS setup.
 do $check_checkpoint$
 begin
   if not exists (
     select 1 from public.checkpoints
     where id = 'a7c6e512-0f06-447e-b57b-8831d11f7ae9'::uuid
       and code = 'AERO_ENTRANCE'
-      and latitude = 6.365841
-      and longitude = 2.423445
-      and radius_m = 50
+      and active = true
   ) then
     raise exception 'AERO_ENTRANCE_CHECKPOINT_NOT_CONFIGURED';
   end if;
@@ -195,3 +186,55 @@ $function$;
 
 revoke all on function public.qr_daily_checkin(uuid,numeric,numeric,numeric) from public, anon;
 grant execute on function public.qr_daily_checkin(uuid,numeric,numeric,numeric) to authenticated;
+
+-- Only a Director may register the physical entrance location.
+create or replace function public.configure_aero_qr_checkpoint(
+  p_lat numeric,
+  p_lng numeric,
+  p_radius_m integer default 50
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_checkpoint public.checkpoints%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'AUTH_REQUIRED';
+  end if;
+  if not public.has_any_role(array['DIRECTOR']::text[]) then
+    raise exception 'CHECKPOINT_CONFIGURATION_FORBIDDEN';
+  end if;
+  if p_lat is null or p_lng is null
+     or p_lat < -90 or p_lat > 90
+     or p_lng < -180 or p_lng > 180
+     or p_radius_m is null or p_radius_m < 15 or p_radius_m > 200 then
+    raise exception 'INVALID_CHECKPOINT_CONFIGURATION';
+  end if;
+
+  update public.checkpoints
+  set latitude = p_lat,
+      longitude = p_lng,
+      radius_m = p_radius_m
+  where id = 'a7c6e512-0f06-447e-b57b-8831d11f7ae9'::uuid
+    and code = 'AERO_ENTRANCE'
+    and active = true
+  returning * into v_checkpoint;
+
+  if not found then
+    raise exception 'AERO_ENTRANCE_CHECKPOINT_NOT_CONFIGURED';
+  end if;
+
+  return jsonb_build_object(
+    'ok', true, 'name', v_checkpoint.name,
+    'latitude', v_checkpoint.latitude,
+    'longitude', v_checkpoint.longitude,
+    'radius_m', v_checkpoint.radius_m
+  );
+end;
+$function$;
+
+revoke all on function public.configure_aero_qr_checkpoint(numeric,numeric,integer) from public, anon;
+grant execute on function public.configure_aero_qr_checkpoint(numeric,numeric,integer) to authenticated;
