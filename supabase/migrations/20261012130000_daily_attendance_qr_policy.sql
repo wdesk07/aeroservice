@@ -124,7 +124,10 @@ begin
     v_cutoff := time '09:15';
   elsif exists (select 1 from public.staff where id = v_uid)
      or exists (select 1 from public.teachers where id = v_uid)
-     or public.has_any_role(array['DIRECTOR','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE'])
+     or public.has_any_role(array[
+       'DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE',
+       'STAFF','PERSONNEL','ACCOUNTING','FINANCE','PEDAGOGY','PEDAGOGIE','TEACHER','ENSEIGNANT'
+     ])
   then
     v_person_type := 'staff';
     v_nominal := time '08:30';
