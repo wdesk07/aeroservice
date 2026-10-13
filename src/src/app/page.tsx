@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { validateManualLateArrival } from "../lib/attendance-validation";
 import { classifyArrival } from "../lib/attendance-policy";
@@ -13,7 +13,7 @@ const supabase: SupabaseClient = createClient(
 
 type Profile = { id: string; public_id?: string | null; first_name?: string | null; last_name?: string | null; display_name?: string | null; email?: string | null; status?: string };
 type Role = { code: string; name: string };
-type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups" | "subjects" | "rooms" | "registrations" | "attendance" | "absenceRequests" | "penalties" | "payments" | "expenses" | "staff" | "roles" | "settings";
+type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups" | "subjects" | "rooms" | "registrations" | "attendance" | "pointage" | "absenceRequests" | "penalties" | "payments" | "expenses" | "staff" | "roles" | "settings";
 type ModuleConfig = { key: ModuleKey; label: string; icon: string; table?: string; columns?: string[]; description: string; section: string };
 const modules: ModuleConfig[] = [
   { key: "dashboard", label: "Vue d’ensemble", icon: "⌂", description: "Les indicateurs essentiels de votre établissement.", section: "PILOTAGE" },
@@ -25,6 +25,7 @@ const modules: ModuleConfig[] = [
   { key: "rooms", label: "Salles", icon: "⌂", table: "rooms", columns: ["code", "name", "capacity", "location_description", "status"], description: "Salles et espaces de formation.", section: "ORGANISATION" },
   { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["id", "registration_number", "person_id", "formation_id", "group_id", "registration_date", "status", "submitted_at", "review_comment"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
   { key: "attendance", label: "Présences", icon: "◷", table: "attendance", columns: ["person_id", "person_type", "status", "planned_at", "arrived_at", "delay_minutes", "access_blocked", "anomaly_reason"], description: "Pointage et suivi des présences.", section: "ADMINISTRATION" },
+  { key: "pointage", label: "Scanner mon arrivée (QR)", icon: "▦", description: "Scanner le QR d’entrée pour enregistrer votre arrivée ou votre retard.", section: "PRÉSENCES" },
   { key: "absenceRequests", label: "Justifications d’absence", icon: "▤", table: "absence_justifications", columns: ["id", "person_id", "reason_type", "reason", "document_url", "submitted_at", "status", "reviewed_at", "review_comment"], description: "Déposer une justification et consulter la décision de la Direction.", section: "PRÉSENCES" },
   { key: "penalties", label: "Pénalités", icon: "⚠", table: "penalties", columns: ["id", "person_id", "penalty_type", "description", "amount_fcfa", "status", "created_at"], description: "Créer et suivre les pénalités, avec leur motif et leur montant.", section: "ADMINISTRATION" },
   { key: "payments", label: "Recettes et paiements", icon: "₣", table: "payments", columns: ["id", "payment_type", "payment_category", "penalty_id", "person_id", "payer_name", "payer_phone", "payer_identifier", "payment_description", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Paiements ordinaires, pénalités et reçus.", section: "FINANCES" },
@@ -45,24 +46,24 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 const escapeHtml = (value: unknown) => String(value ?? "—").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\x27/g,"&#39;");
 
 const roleModules: Record<string, ModuleKey[]> = {
-  DIRECTOR: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceRequests","penalties","payments","staff","roles","settings"],
-  ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceRequests","penalties","payments","staff","roles","settings"],
-  PRE_ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceRequests","penalties","payments","staff","roles","settings"],
-  SECRETARY: ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
-  SECRETARIAT: ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
-  SECRETAIRE: ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
-  "SECRÉTAIRE": ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
-  PEDAGOGY: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
-  PEDAGOGIE: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
-  TEACHER: ["dashboard","groups","subjects","attendance","formations","settings"],
-  ENSEIGNANT: ["dashboard","groups","subjects","attendance","formations","settings"],
-  STAFF: ["dashboard","attendance","settings"],
-  PERSONNEL: ["dashboard","attendance","settings"],
+  DIRECTOR: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","pointage","absenceRequests","penalties","payments","staff","roles","settings"],
+  ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","pointage","absenceRequests","penalties","payments","staff","roles","settings"],
+  PRE_ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","pointage","absenceRequests","penalties","payments","staff","roles","settings"],
+  SECRETARY: ["dashboard","students","registrations","attendance","pointage","absenceRequests","penalties","payments","expenses","settings"],
+  SECRETARIAT: ["dashboard","students","registrations","attendance","pointage","absenceRequests","penalties","payments","expenses","settings"],
+  SECRETAIRE: ["dashboard","students","registrations","attendance","pointage","absenceRequests","penalties","payments","expenses","settings"],
+  "SECRÉTAIRE": ["dashboard","students","registrations","attendance","pointage","absenceRequests","penalties","payments","expenses","settings"],
+  PEDAGOGY: ["dashboard","students","teachers","formations","groups","subjects","attendance","pointage","settings"],
+  PEDAGOGIE: ["dashboard","students","teachers","formations","groups","subjects","attendance","pointage","settings"],
+  TEACHER: ["dashboard","groups","subjects","attendance","pointage","formations","settings"],
+  ENSEIGNANT: ["dashboard","groups","subjects","attendance","pointage","formations","settings"],
+  STAFF: ["dashboard","attendance","pointage","settings"],
+  PERSONNEL: ["dashboard","attendance","pointage","settings"],
   ACCOUNTING: ["dashboard","penalties","payments","expenses","settings"],
   FINANCE: ["dashboard","penalties","payments","expenses","settings"],
   TRAVEL_AGENT: ["dashboard","formations","settings"],
-  STUDENT: ["dashboard","absenceRequests","settings"],
-  APPRENANT: ["dashboard","absenceRequests","settings"]
+  STUDENT: ["dashboard","pointage","absenceRequests","settings"],
+  APPRENANT: ["dashboard","pointage","absenceRequests","settings"]
 };
 const canAccessModule = (key: ModuleKey, roleCodes: string[]) => {
   const normalized = roleCodes.map(code => code.toUpperCase());
@@ -106,6 +107,12 @@ export default function Home() {
   const [ruleSchemaReady, setRuleSchemaReady] = useState(true);
   const [ruleForm, setRuleForm] = useState({ penalty_type: "late_arrival", description: "", target_scope: "all", application_mode: "automatic", applies_after_time: "08:20", min_delay_minutes: "0", tolerance_minutes: "0", amount_fcfa: "2000" });
   const [applyRuleForm, setApplyRuleForm] = useState({ rule_id: "", person_id: "" });
+  const [scannerActive, setScannerActive] = useState(false);
+  const [scanResult, setScanResult] = useState<Record<string, any> | null>(null);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerStreamRef = useRef<MediaStream | null>(null);
 
   const loadIdentity = useCallback(async (current: User) => {
     const [{ data: p }, { data: r }] = await Promise.all([
@@ -264,6 +271,82 @@ export default function Home() {
     const { data, error: statusError } = await supabase.rpc("get_operating_day_status");
     if (!statusError && data && typeof data === "object") setOperatingDay(data as Record<string, any>);
   }
+
+  async function startQrScanner() {
+    setCameraError(""); setScanResult(null);
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError("La caméra n’est pas disponible dans ce navigateur. Ouvrez la plateforme avec Chrome récent en HTTPS et autorisez la caméra."); return;
+    }
+    const Detector = (window as any).BarcodeDetector;
+    if (!Detector) {
+      setCameraError("Ce navigateur ne prend pas en charge le scan QR natif. Essayez Chrome à jour sur téléphone, ou utilisez un navigateur compatible."); return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      scannerStreamRef.current = stream;
+      if (scannerVideoRef.current) { scannerVideoRef.current.srcObject = stream; await scannerVideoRef.current.play(); }
+      setScannerActive(true);
+      const detector = new Detector({ formats: ["qr_code"] });
+      const scanLoop = async () => {
+        if (!scannerStreamRef.current || !scannerVideoRef.current) return;
+        try {
+          const codes = await detector.detect(scannerVideoRef.current);
+          const raw = String(codes?.[0]?.rawValue || "").trim();
+          if (raw) {
+            const accepted = raw === "AERO_SERVICE:AERO_ENTRANCE" || raw === "a7c6e512-0f06-447e-b57b-8831d11f7ae9" || raw.includes("AERO_ENTRANCE");
+            stopQrScanner();
+            if (!accepted) { setCameraError("Ce QR code ne correspond pas au point de contrôle Aéro Service. Scannez le QR officiel de l’entrée."); return; }
+            await submitQrCheckin();
+            return;
+          }
+        } catch { /* Keep scanning until a valid QR is detected. */ }
+        if (scannerStreamRef.current) window.setTimeout(() => { void scanLoop(); }, 220);
+      };
+      void scanLoop();
+    } catch (e) {
+      setCameraError("Impossible d’ouvrir la caméra. Autorisez son utilisation dans le navigateur puis réessayez.");
+      stopQrScanner();
+    }
+  }
+
+  function stopQrScanner() {
+    scannerStreamRef.current?.getTracks().forEach(track => track.stop());
+    scannerStreamRef.current = null;
+    if (scannerVideoRef.current) scannerVideoRef.current.srcObject = null;
+    setScannerActive(false);
+  }
+
+  async function submitQrCheckin() {
+    setScanBusy(true); setCameraError(""); setScanResult(null);
+    if (!navigator.geolocation) { setCameraError("La géolocalisation est nécessaire pour confirmer que vous êtes à l’entrée Aéro Service."); setScanBusy(false); return; }
+    navigator.geolocation.getCurrentPosition(async position => {
+      const { data, error: checkinError } = await supabase.rpc("qr_daily_checkin", {
+        p_checkpoint_id: "a7c6e512-0f06-447e-b57b-8831d11f7ae9",
+        p_lat: position.coords.latitude,
+        p_lng: position.coords.longitude,
+        p_accuracy_m: position.coords.accuracy
+      });
+      if (checkinError) {
+        const message = checkinError.message || "";
+        const known: [string,string][] = [
+          ["AUTH_REQUIRED","Connectez-vous avant de pointer."], ["GPS_REQUIRED_OR_INACCURATE","Le GPS est trop imprécis. Activez la localisation et réessayez."],
+          ["CHECKPOINT_INACTIVE","Le point de contrôle QR est désactivé."], ["OUTSIDE_CHECKPOINT_RADIUS","Vous êtes trop loin de l’entrée autorisée pour pointer."],
+          ["PERSON_NOT_REGISTERED","Votre compte n’est pas encore rattaché à un dossier apprenant ou personnel."],
+          ["STUDENT_CHECKIN_CLOSED","Le pointage QR des apprenants est fermé après 19 h 00."],
+          ["duplicate",""]
+        ];
+        const matched = known.find(([code]) => message.includes(code));
+        setCameraError(matched ? matched[1] : "Le pointage n’a pas été enregistré. Vérifiez que les migrations QR ont été installées sur la base de test.");
+      } else {
+        setScanResult(data as Record<string, any>);
+      }
+      setScanBusy(false);
+    }, () => { setCameraError("La localisation a été refusée ou est indisponible. Autorisez le GPS pour confirmer le pointage."); setScanBusy(false); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+  }
+
+  useEffect(() => () => {
+    scannerStreamRef.current?.getTracks().forEach(track => track.stop());
+  }, []);
 
   async function operateEstablishment(action: "open" | "close") {
     setBusy(true); setError(""); setNotice("");
@@ -792,9 +875,10 @@ export default function Home() {
   const canCreateStaffAccount = roles.some(r => ["SECRETARIAT", "DIRECTOR"].includes(r.code.toUpperCase()));
   const roleCodes = roles.map(r => r.code.toUpperCase());
   const visibleModules = modules.filter(m => canAccessModule(m.key, roleCodes));
-  const isLearner = roleCodes.some(code => ["STUDENT","APPRENANT"].includes(code));
+  const isLearner = roleCodes.some(code => ["STUDENT","APPRENANT"].includes(code)) && !roleCodes.some(code => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE","STAFF","PERSONNEL","TEACHER","ENSEIGNANT"].includes(code));
   const roleLabel = isAdmin ? "Direction / Administration" : isSecretary || roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) ? "Secrétariat / Finances" : roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE"].includes(code)) ? "Pédagogie" : roleCodes.some(code => ["TEACHER","ENSEIGNANT"].includes(code)) ? "Enseignant" : roleCodes.some(code => ["STAFF","PERSONNEL"].includes(code)) ? "Personnel" : isLearner ? "Apprenant" : "Accès à définir";
   const canOperateDay = roles.some(r => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE"].includes(r.code.toUpperCase()));
+  const canSeeOperatingDay = canOperateDay || roleCodes.some(code => ["STAFF","PERSONNEL"].includes(code));
 
   useEffect(() => {
     if (mode !== "signup") return;
@@ -851,7 +935,7 @@ export default function Home() {
         {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
         {active==="dashboard" && <>
           <div className="page-heading"><div><div className="eyebrow">ESPACE PERSONNEL · {roleLabel.toUpperCase()}</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">{isAdmin ? "Vue globale de l’établissement et accès aux fonctions administratives." : isSecretary ? "Espace secrétariat : inscriptions, suivi des paiements et validation des accès apprenants." : isLearner ? "Votre espace apprenant personnel." : "Retrouvez les outils correspondant à votre fonction."}</p></div>{isAdmin && <button className="btn btn-primary" onClick={()=>{setActive("formations");setShowCreate(true);}}>＋ Nouvelle formation</button>}</div>
-          {operatingDay && !isLearner && <div className="panel" style={{marginBottom:18}}>
+          {canSeeOperatingDay && <div className="panel" style={{marginBottom:18}}>
             <div className="panel-head">
               <div><div className="panel-title">Ouverture et fermeture d’Aéro Service</div><div className="panel-desc">Heure de référence : Bénin (Africa/Porto-Novo) · Ouverture cible 08 h 30 · Début des cours 09 h 00 · Fin des cours 19 h 00 · Fermeture cible 20 h 30</div></div>
               <span className={"pill " + (operatingDay.status === "open" ? "active" : "pending")}>{operatingDay.status === "open" ? "Établissement ouvert" : operatingDay.status === "closed" ? "Établissement fermé" : "Journée non ouverte"}</span>
@@ -882,10 +966,11 @@ export default function Home() {
             {key:"payments" as ModuleKey,icon:"₣",title:"Suivi des paiements",desc:"Consulter les règlements"},
             {key:"roles" as ModuleKey,icon:"⚿",title:"Rôles & autorisations",desc:"Consulter les rôles configurés"}
           ].filter(q => canAccessModule(q.key, roleCodes)).map(q=><button className="quick-action" key={q.key} onClick={()=>{setActive(q.key);setSearch("");setError("");}}><span className="quick-icon">{q.icon}</span><span><div className="quick-title">{q.title}</div><div className="quick-desc">{q.desc}</div></span><span style={{marginLeft:"auto",color:"#9aa8b8"}}>→</span></button>)}</div></div></div>}
-          {isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre espace apprenant</div><div className="panel-desc">Bienvenue dans votre espace personnel. Les informations pédagogiques et votre suivi doivent être consultés depuis les rubriques qui vous sont autorisées.</div></div></div><div className="panel-body">Votre rôle actuel : <strong>Apprenant</strong>. Les fonctions de gestion, les dossiers d’autres apprenants, le personnel et les paramètres administratifs ne sont pas accessibles depuis ce compte.</div></div>}
+          {isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Mon parcours et mon suivi</div><div className="panel-desc">Un espace personnel pour pointer mon arrivée, suivre mes présences, régulariser une absence et consulter les décisions de la Direction.</div></div></div><div className="panel-body"><div className="quick-grid"><button className="quick-action" onClick={()=>{setActive("pointage");setError("");setNotice("");}}><span className="quick-icon">▦</span><span><div className="quick-title">Scanner mon arrivée</div><div className="quick-desc">Pointer à l’entrée par QR et géolocalisation</div></span><span style={{marginLeft:"auto"}}>→</span></button><button className="quick-action" onClick={()=>{setActive("absenceRequests");setError("");setNotice("");}}><span className="quick-icon">▤</span><span><div className="quick-title">Justifier une absence</div><div className="quick-desc">Envoyer un motif et suivre la décision</div></span><span style={{marginLeft:"auto"}}>→</span></button><button className="quick-action" onClick={()=>{setActive("attendance");setError("");setNotice("");}}><span className="quick-icon">◷</span><span><div className="quick-title">Mes présences</div><div className="quick-desc">Consulter mon historique de pointage</div></span><span style={{marginLeft:"auto"}}>→</span></button><button className="quick-action" onClick={()=>{setActive("penalties");setError("");setNotice("");}}><span className="quick-icon">⚠</span><span><div className="quick-title">Mes pénalités</div><div className="quick-desc">Voir les pénalités qui me concernent</div></span><span style={{marginLeft:"auto"}}>→</span></button></div><p className="stat-foot" style={{marginTop:14}}>Les fonctions administratives et les données des autres personnes restent masquées. Les montants et décisions affichés dépendent des validations enregistrées.</p></div></div>}
           <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"À vérifier"}</span></div></div></div></div>
         </>}
-        {active!=="dashboard" && active!=="settings" && <>
+        {active === "pointage" && <div className="panel"><div className="panel-head"><div><div className="panel-title">Pointage d’arrivée par QR</div><div className="panel-desc">Scannez le QR officiel placé à l’entrée. Le système utilise l’heure du serveur et vérifie votre position GPS; l’heure de l’appareil ne décide pas du retard.</div></div><span className="pill pending">Entrée Aéro Service</span></div><div className="panel-body"><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:20,alignItems:"start"}}><div><video ref={scannerVideoRef} playsInline muted style={{width:"100%",maxWidth:420,aspectRatio:"4 / 3",background:"#10243b",borderRadius:14,display:scannerActive?"block":"none",objectFit:"cover"}}/><div style={{border:"1px dashed #a9b8c8",borderRadius:14,padding:24,textAlign:"center",display:scannerActive?"none":"block"}}><div style={{fontSize:42,marginBottom:8}}>▦</div><strong>Prêt à scanner</strong><p className="stat-foot">Utilisez un téléphone ou un navigateur compatible avec la caméra. Autorisez caméra et localisation.</p></div><div className="form-actions" style={{marginTop:12}}>{!scannerActive ? <button className="btn btn-primary" onClick={()=>void startQrScanner()} disabled={scanBusy}>Ouvrir la caméra et scanner</button> : <button className="btn" onClick={stopQrScanner}>Arrêter le scan</button>}<button className="btn" onClick={()=>void submitQrCheckin()} disabled={scanBusy}>{scanBusy?"Vérification…":"J’ai déjà scanné le QR"}</button></div></div><div><h3 style={{marginTop:0}}>Règles de pointage</h3><ul style={{lineHeight:1.8,paddingLeft:20}}><li>Apprenant : arrivée à l’heure selon la tolérance configurée; retard à partir de 09 h 16.</li><li>Personnel : arrivée à l’heure jusqu’à 08 h 30; retard à partir de 08 h 31.</li><li>Un seul pointage est conservé par personne et par jour.</li><li>La géolocalisation confirme la proximité du point d’entrée.</li><li>Le QR apprenant est fermé à 19 h 00.</li></ul><p className="stat-foot">Le pointage du personnel utilise le même dispositif, avec son heure de référence. Le QR ne remplace pas une validation de paiement ou une décision administrative.</p></div></div>{cameraError && <div className="toast error-message" style={{marginTop:16}}>{cameraError}</div>}{scanResult && <div className="panel" style={{marginTop:16}}><div className="panel-body"><span className={"pill "+(scanResult.status==="on_time"?"active":"late")}>{scanResult.status==="on_time"?"Arrivée à l’heure": "Retard enregistré"}</span><h3>{scanResult.duplicate?"Pointage déjà enregistré aujourd’hui":"Pointage confirmé"}</h3><p>Heure enregistrée : <strong>{scanResult.arrived_at?new Date(scanResult.arrived_at).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Porto-Novo"}):"—"}</strong></p><p>Retard : <strong>{Number(scanResult.minutes_after_cutoff||0)} minute(s)</strong></p>{scanResult.checkpoint && <p>Point de contrôle : {scanResult.checkpoint}</p>}</div></div>}</div></div>}
+        {active!=="dashboard" && active!=="settings" && active!=="pointage" && <>
           <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{active === "attendance" ? "Enregistrez le retard, validez le montant payé et autorisez l’accès à l’apprenant." : activeModule.description}</p></div>{((["formations","students","registrations","groups","subjects","rooms"].includes(active)&&(isAdmin||(active==="registrations"&&canCreateStaffAccount)))||(active==="penalties"&&canManagePenalties)||(active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE","DIRECTOR","ADMIN","PRE_ADMIN"].includes(role.code.toUpperCase())))||(active==="expenses"&&roles.some(role=>["ACCOUNTING","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE","DIRECTOR","ADMIN","PRE_ADMIN"].includes(role.code.toUpperCase())))||(active==="absenceRequests"&&isLearner))&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="students"?"＋ Ajouter un dossier":active==="registrations"?"＋ Nouvelle inscription":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":active==="payments"?"＋ Enregistrer une recette":active==="expenses"?"＋ Enregistrer une dépense":active==="absenceRequests"?"＋ Déposer une justification":active==="penalties"?"＋ Nouvelle pénalité":"＋ Ajouter une salle"}</button>}</div>
           {active === "penalties" && canManagePenalties && <div className="panel" style={{marginBottom:16}}><div className="panel-head"><div><div className="panel-title">Règles générales de pénalité</div><div className="panel-desc">Définissez une règle une seule fois pour les apprenants et le personnel. Créer une règle ne facture personne immédiatement.</div></div></div><div className="panel-body">{!ruleSchemaReady && <div className="notice notice-warning" role="status">La base utilisée par cette prévisualisation ne possède pas encore les colonnes des règles générales. La migration doit être appliquée à une base de test avant l’enregistrement.</div>}<form onSubmit={createPenaltyRule}><div className="form-grid"><label className="field">Motif<select required value={ruleForm.penalty_type} onChange={e=>setRuleForm({...ruleForm,penalty_type:e.target.value,application_mode:e.target.value==="late_arrival"?ruleForm.application_mode:"manual"})}><option value="late_arrival">Retard</option><option value="unjustified_absence">Absence injustifiée</option><option value="early_departure">Départ anticipé</option><option value="repeated_absence">Absences répétées</option><option value="noncompliance">Non-respect du règlement</option><option value="misconduct">Comportement inapproprié</option><option value="equipment_damage">Dégradation de matériel</option><option value="equipment_loss">Perte de matériel</option><option value="badge_loss">Perte de badge</option><option value="incomplete_file">Dossier incomplet</option><option value="late_payment">Retard de paiement</option><option value="unauthorized_access">Accès non autorisé</option><option value="safety_violation">Infraction à la sécurité</option><option value="exam_misconduct">Fraude ou incident d’examen</option><option value="other">Autre</option></select></label><label className="field">Personnes visées<select required value={ruleForm.target_scope} onChange={e=>setRuleForm({...ruleForm,target_scope:e.target.value})}><option value="all">Tout le monde (apprenants et personnel)</option><option value="students">Apprenants seulement</option><option value="staff">Personnel seulement</option><option value="teacher">Formateurs / enseignants seulement</option></select></label><label className="field">Mode d’application<select required value={ruleForm.application_mode} onChange={e=>setRuleForm({...ruleForm,application_mode:e.target.value})}><option value="automatic" disabled={ruleForm.penalty_type!=="late_arrival"}>Automatique lors du pointage (retards uniquement)</option><option value="manual">Manuel par l’administration</option></select></label><label className="field">Heure limite d’arrivée<input type="time" value={ruleForm.applies_after_time} onChange={e=>setRuleForm({...ruleForm,applies_after_time:e.target.value})}/></label><label className="field">Retard minimum (minutes)<input type="number" min="0" step="1" required value={ruleForm.min_delay_minutes} onChange={e=>setRuleForm({...ruleForm,min_delay_minutes:e.target.value})}/></label><label className="field">Tolérance (minutes)<input type="number" min="0" step="1" required value={ruleForm.tolerance_minutes} onChange={e=>setRuleForm({...ruleForm,tolerance_minutes:e.target.value})}/></label><label className="field">Montant (FCFA)<input type="number" min="1" step="1" required value={ruleForm.amount_fcfa} onChange={e=>setRuleForm({...ruleForm,amount_fcfa:e.target.value})}/></label><label className="field">Description / conditions<input value={ruleForm.description} onChange={e=>setRuleForm({...ruleForm,description:e.target.value})} placeholder="Ex. arrivée après 08 h 20"/></label></div><div className="form-actions"><button type="submit" className="btn btn-primary" disabled={busy || !ruleSchemaReady}>{busy?"Enregistrement…":"Enregistrer la règle générale"}</button></div></form><div className="panel" style={{marginTop:18}}><div className="panel-head"><div><div className="panel-title">Appliquer une règle manuellement</div><div className="panel-desc">Crée une pénalité à régler pour une personne précise, sans encaisser ni valider le paiement.</div></div></div><div className="panel-body"><form onSubmit={applyPenaltyRule}><div className="form-grid"><label className="field">Règle active<select required value={applyRuleForm.rule_id} onChange={e=>setApplyRuleForm({...applyRuleForm,rule_id:e.target.value})}><option value="">Choisir une règle</option>{penaltyRules.filter(rule=>rule.active && rule.application_mode==="manual").map(rule=><option key={rule.id} value={rule.id}>{rule.penalty_type} — {Number(rule.amount_fcfa).toLocaleString("fr-FR")} FCFA{rule.description?" — "+rule.description:""}</option>)}</select></label><label className="field">Personne concernée<select required value={applyRuleForm.person_id} onChange={e=>setApplyRuleForm({...applyRuleForm,person_id:e.target.value})}><option value="">Choisir une personne</option>{profileOptions.filter(person=>{const rule=penaltyRules.find(item=>item.id===applyRuleForm.rule_id);if(!rule||rule.target_scope==="all")return true;if(rule.target_scope==="staff")return staffIds.includes(person.id);if(rule.target_scope==="teacher")return teacherIds.includes(person.id);if(rule.target_scope==="students")return studentIds.includes(person.id);return false;}).map(person=><option key={person.id} value={person.id}>{person.display_name||[person.first_name,person.last_name].filter(Boolean).join(" ")||person.public_id||person.id}</option>)}</select></label></div><div className="form-actions"><button type="submit" className="btn btn-primary" disabled={busy || !ruleSchemaReady}>Attribuer la pénalité</button></div></form></div></div><div className="panel" style={{marginTop:18}}><div className="panel-head"><div><div className="panel-title">Règles enregistrées</div><div className="panel-desc">{penaltyRules.length} règle(s) chargée(s)</div></div></div><div className="panel-body">{penaltyRules.length===0?<p>Aucune règle générale disponible pour le moment.</p>:<div className="table-wrap"><table><thead><tr><th>Motif</th><th>Public</th><th>Mode</th><th>Heure limite</th><th>Montant</th><th>État</th></tr></thead><tbody>{penaltyRules.map(rule=><tr key={rule.id}><td>{rule.penalty_type||"Autre"}{rule.description?" — "+rule.description:""}</td><td>{rule.target_scope==="all"?"Tout le monde":rule.target_scope==="students"?"Apprenants":rule.target_scope==="staff"?"Personnel":"Enseignants"}</td><td>{rule.application_mode==="automatic"?"Automatique":"Manuel"}</td><td>{rule.applies_after_time||"Selon le retard"}</td><td>{Number(rule.amount_fcfa).toLocaleString("fr-FR")} FCFA</td><td>{rule.active?"Active":"Inactive"}</td></tr>)}</tbody></table></div>}</div></div></div></div>}{active === "attendance" && isSecretary && <div className="panel late-panel"><div className="panel-head"><div><div className="panel-title">Retard et autorisation d’accès</div><div className="panel-desc">{isAdmin ? "Pour les apprenants et le personnel. Le DG et l’administration retrouvent les retards et paiements validés." : "Réservé aux apprenants : après validation du paiement, leur accès est autorisé. La secrétaire ne peut pas valider l’accès du personnel."}</div></div><span className="pill late-status">● Validation secrétaire</span></div><div className="panel-body"><form onSubmit={registerLateArrival}><div className="form-grid">{isAdmin && <label className="field">Catégorie<select required value={lateForm.person_type} onChange={e=>setLateForm({...lateForm,person_type:e.target.value,person_id:"",planned_time:e.target.value === "student" ? "09:00" : "08:30"})}><option value="student">Apprenant</option><option value="staff">Personnel</option></select></label>}<label className="field">{lateForm.person_type === "staff" ? "Membre du personnel" : "Apprenant"}<select required value={lateForm.person_id} onChange={e=>setLateForm({...lateForm,person_id:e.target.value})}><option value="">Rechercher / choisir une personne</option>{profileOptions.filter(item=>lateForm.person_type !== "staff" || staffIds.includes(item.id)).map(item=><option key={item.id} value={item.id}>{item.public_id ? item.public_id + " — " : ""}{item.display_name||[item.first_name,item.last_name].filter(Boolean).join(" ")||item.id}</option>)}</select></label><label className="field">Heure limite de référence<input type="time" readOnly required value={lateForm.person_type === "student" ? "09:00" : "08:30"}/><small>{lateForm.person_type === "student" ? "Tolérance jusqu’à 09 h 15 inclus." : "Aucune tolérance après 08 h 30."}</small></label><label className="field">Heure d’arrivée constatée<input type="time" value={lateForm.arrived_time} onChange={e=>setLateForm({...lateForm,arrived_time:e.target.value})} /></label><label className="field">Montant payé (FCFA)<input type="number" min="1" step="1" required value={lateForm.amount_fcfa} onChange={e=>setLateForm({...lateForm,amount_fcfa:e.target.value})} placeholder="Ex. 1000"/></label><label className="field">Mode de paiement<select required value={lateForm.method} onChange={e=>setLateForm({...lateForm,method:e.target.value})}><option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="other">Autre</option></select></label><label className="field">Opérateur (facultatif)<input value={lateForm.provider} onChange={e=>setLateForm({...lateForm,provider:e.target.value})} placeholder="Ex. MTN, Moov…"/></label><label className="field">Référence du paiement (facultatif)<input value={lateForm.transaction_reference} onChange={e=>setLateForm({...lateForm,transaction_reference:e.target.value})} placeholder="Référence ou numéro de reçu"/></label><label className="field">Motif / observation (facultatif)<input value={lateForm.reason} onChange={e=>setLateForm({...lateForm,reason:e.target.value})} placeholder="Ex. transport, circulation…"/></label></div><div className="late-preview"><span className="late-dot"></span><div><strong>Après validation réussie</strong><p>Le statut devient « Retard régularisé », la ligne apparaît en jaune et l’accès est autorisé. Le montant est conservé dans le suivi des paiements.</p></div></div><div className="form-actions"><button type="button" className="btn" onClick={()=>setLateForm({person_type:"student",person_id:"",planned_time:"08:00",arrived_time:"",amount_fcfa:"",method:"cash",provider:"",transaction_reference:"",reason:""})}>Effacer</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Validation en cours…":"Valider le paiement et autoriser l’accès"}</button></div></form></div></div>}
           {active==="registrations"&&showCreate&&canCreateStaffAccount&&<div className="panel"><div className="panel-head"><div><div className="panel-title">Créer un compte pour un nouvel arrivant</div><div className="panel-desc">La secrétaire peut créer les identifiants et attribuer un rôle. Les rôles Direction et Pré-administrateur sont interdits ici.</div></div></div><div className="panel-body"><form onSubmit={createAccountForRegistration}><div className="form-grid"><label className="field">Nom et prénom<input required value={newAccount.display_name} onChange={e=>setNewAccount({...newAccount,display_name:e.target.value})} placeholder="Nom complet"/></label><label className="field">Adresse e-mail (identifiant)<input type="email" required value={newAccount.email} onChange={e=>setNewAccount({...newAccount,email:e.target.value})} placeholder="eleve@exemple.com"/></label><label className="field">Mot de passe initial<input type="password" required minLength={8} value={newAccount.password} onChange={e=>setNewAccount({...newAccount,password:e.target.value})} placeholder="8 caractères minimum"/></label><label className="field">Téléphone (facultatif)<input value={newAccount.phone} onChange={e=>setNewAccount({...newAccount,phone:e.target.value})} placeholder="Téléphone"/></label><label className="field">Rôle à attribuer<select required value={newAccount.role_code} onChange={e=>setNewAccount({...newAccount,role_code:e.target.value})}><option value="STUDENT">Apprenant</option><option value="TEACHER">Enseignant</option><option value="STAFF">Personnel</option><option value="TRAVEL_AGENT">Agent de voyage</option><option value="ACCOUNTING">Comptabilité / Finance</option><option value="PEDAGOGY">Responsable pédagogique</option></select></label></div><div className="form-actions"><button type="submit" className="btn btn-primary" disabled={busy}>{busy?"Création du compte…":"Créer le compte et attribuer le rôle"}</button></div></form></div></div>}
