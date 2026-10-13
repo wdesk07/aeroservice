@@ -904,7 +904,7 @@ export default function Home() {
   const canCreateStaffAccount = roles.some(r => ["SECRETARIAT", "DIRECTOR"].includes(r.code.toUpperCase()));
   const roleCodes = roles.map(r => r.code.toUpperCase());
   const visibleModules = modules.filter(m => canAccessModule(m.key, roleCodes));
-  const isLearner = roleCodes.some(code => ["STUDENT","APPRENANT"].includes(code)) && !roleCodes.some(code => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE","STAFF","PERSONNEL","TEACHER","ENSEIGNANT"].includes(code));
+  const isLearner = roleCodes.some(code => ["STUDENT","APPRENANT"].includes(code)) && !roleCodes.some(code => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE","STAFF","PERSONNEL","TEACHER","ENSEIGNANT","ACCOUNTING","FINANCE","PEDAGOGY","PEDAGOGIE","TRAVEL_AGENT"].includes(code));
   const roleLabel = isAdmin ? "Direction / Administration" : isSecretary || roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) ? "Secrétariat / Finances" : roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE"].includes(code)) ? "Pédagogie" : roleCodes.some(code => ["TEACHER","ENSEIGNANT"].includes(code)) ? "Enseignant" : roleCodes.some(code => ["STAFF","PERSONNEL"].includes(code)) ? "Personnel" : isLearner ? "Apprenant" : "Accès à définir";
   const canOperateDay = roles.some(r => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE"].includes(r.code.toUpperCase()));
   const canSeeOperatingDay = canOperateDay || roleCodes.some(code => ["STAFF","PERSONNEL"].includes(code));
