@@ -1,4 +1,4 @@
--- General penalty-rule fields and strict Director/Admin write access.
+-- General penalty-rule fields and strict Director-only write access.
 -- Backfill legacy rule scope before enforcing the new non-null column.
 alter table public.penalty_rules
   add column if not exists target_scope text,
@@ -52,19 +52,19 @@ $$;
 drop policy if exists "penalties manage authorized" on public.penalties;
 drop policy if exists "pre_admin_full_access" on public.penalties;
 
-create policy "penalties manage director admin"
+create policy "penalties manage director only"
   on public.penalties
   for all
   to authenticated
-  using (public.has_any_role(array['DIRECTOR', 'ADMIN']::text[]))
-  with check (public.has_any_role(array['DIRECTOR', 'ADMIN']::text[]));
+  using (public.has_any_role(array['DIRECTOR']::text[]))
+  with check (public.has_any_role(array['DIRECTOR']::text[]));
 
 drop policy if exists "penalty rules manage admin" on public.penalty_rules;
 drop policy if exists "pre_admin_full_access" on public.penalty_rules;
 
-create policy "penalty rules manage director admin"
+create policy "penalty rules manage director only"
   on public.penalty_rules
   for all
   to authenticated
-  using (public.has_any_role(array['DIRECTOR', 'ADMIN']::text[]))
-  with check (public.has_any_role(array['DIRECTOR', 'ADMIN']::text[]));
+  using (public.has_any_role(array['DIRECTOR']::text[]))
+  with check (public.has_any_role(array['DIRECTOR']::text[]));
