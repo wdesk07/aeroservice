@@ -13,7 +13,7 @@ const supabase: SupabaseClient = createClient(
 
 type Profile = { id: string; public_id?: string | null; first_name?: string | null; last_name?: string | null; display_name?: string | null; email?: string | null; status?: string };
 type Role = { code: string; name: string };
-type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups" | "subjects" | "rooms" | "registrations" | "attendance" | "penalties" | "payments" | "expenses" | "staff" | "roles" | "settings";
+type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups" | "subjects" | "rooms" | "registrations" | "attendance" | "absenceRequests" | "penalties" | "payments" | "expenses" | "staff" | "roles" | "settings";
 type ModuleConfig = { key: ModuleKey; label: string; icon: string; table?: string; columns?: string[]; description: string; section: string };
 const modules: ModuleConfig[] = [
   { key: "dashboard", label: "Vue d’ensemble", icon: "⌂", description: "Les indicateurs essentiels de votre établissement.", section: "PILOTAGE" },
@@ -25,6 +25,7 @@ const modules: ModuleConfig[] = [
   { key: "rooms", label: "Salles", icon: "⌂", table: "rooms", columns: ["code", "name", "capacity", "location_description", "status"], description: "Salles et espaces de formation.", section: "ORGANISATION" },
   { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["id", "registration_number", "person_id", "formation_id", "group_id", "registration_date", "status", "submitted_at", "review_comment"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
   { key: "attendance", label: "Présences", icon: "◷", table: "attendance", columns: ["person_id", "person_type", "status", "planned_at", "arrived_at", "delay_minutes", "access_blocked", "anomaly_reason"], description: "Pointage et suivi des présences.", section: "ADMINISTRATION" },
+  { key: "absenceRequests", label: "Justifications d’absence", icon: "▤", table: "absence_justifications", columns: ["id", "person_id", "reason_type", "reason", "document_url", "submitted_at", "status", "reviewed_at", "review_comment"], description: "Déposer une justification et consulter la décision de la Direction.", section: "PRÉSENCES" },
   { key: "penalties", label: "Pénalités", icon: "⚠", table: "penalties", columns: ["id", "person_id", "penalty_type", "description", "amount_fcfa", "status", "created_at"], description: "Créer et suivre les pénalités, avec leur motif et leur montant.", section: "ADMINISTRATION" },
   { key: "payments", label: "Recettes et paiements", icon: "₣", table: "payments", columns: ["id", "payment_type", "payment_category", "penalty_id", "person_id", "payer_name", "payer_phone", "payer_identifier", "payment_description", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Paiements ordinaires, pénalités et reçus.", section: "FINANCES" },
   { key: "expenses", label: "Dépenses", icon: "↘", table: "expenses", columns: ["expense_date", "category", "amount_fcfa", "reason", "beneficiary", "proof_url", "status", "created_by", "created_at"], description: "Enregistrement et suivi des dépenses de l’établissement.", section: "FINANCES" },
@@ -44,13 +45,13 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 const escapeHtml = (value: unknown) => String(value ?? "—").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\x27/g,"&#39;");
 
 const roleModules: Record<string, ModuleKey[]> = {
-  DIRECTOR: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","penalties","payments","staff","roles","settings"],
-  ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","penalties","payments","staff","roles","settings"],
-  PRE_ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","penalties","payments","staff","roles","settings"],
-  SECRETARY: ["dashboard","students","registrations","attendance","penalties","payments","expenses","settings"],
-  SECRETARIAT: ["dashboard","students","registrations","attendance","penalties","payments","expenses","settings"],
-  SECRETAIRE: ["dashboard","students","registrations","attendance","penalties","payments","expenses","settings"],
-  "SECRÉTAIRE": ["dashboard","students","registrations","attendance","penalties","payments","expenses","settings"],
+  DIRECTOR: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceRequests","penalties","payments","staff","roles","settings"],
+  ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceRequests","penalties","payments","staff","roles","settings"],
+  PRE_ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceRequests","penalties","payments","staff","roles","settings"],
+  SECRETARY: ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
+  SECRETARIAT: ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
+  SECRETAIRE: ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
+  "SECRÉTAIRE": ["dashboard","students","registrations","attendance","absenceRequests","penalties","payments","expenses","settings"],
   PEDAGOGY: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
   PEDAGOGIE: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
   TEACHER: ["dashboard","groups","subjects","attendance","formations","settings"],
@@ -60,8 +61,8 @@ const roleModules: Record<string, ModuleKey[]> = {
   ACCOUNTING: ["dashboard","penalties","payments","expenses","settings"],
   FINANCE: ["dashboard","penalties","payments","expenses","settings"],
   TRAVEL_AGENT: ["dashboard","formations","settings"],
-  STUDENT: ["dashboard","settings"],
-  APPRENANT: ["dashboard","settings"]
+  STUDENT: ["dashboard","absenceRequests","settings"],
+  APPRENANT: ["dashboard","absenceRequests","settings"]
 };
 const canAccessModule = (key: ModuleKey, roleCodes: string[]) => {
   const normalized = roleCodes.map(code => code.toUpperCase());
@@ -294,6 +295,11 @@ export default function Home() {
       { name: "enrollment_date", label: "Date d’inscription", type: "date" },
       { name: "education_level", label: "Niveau d’études" }
     ],
+    absenceRequests: [
+      { name: "reason_type", label: "Motif", type: "select", required: true, options: [{ label: "Maladie", value: "illness" }, { label: "Urgence familiale", value: "family_emergency" }, { label: "Transport", value: "transport" }, { label: "Obligation administrative", value: "administrative" }, { label: "Autre motif", value: "other" }] },
+      { name: "reason", label: "Explication (facultatif)" },
+      { name: "document_url", label: "Lien vers un justificatif (facultatif)" }
+    ],
     registrations: [
       { name: "registration_number", label: "Numéro d’inscription", required: true },
       { name: "person_id", label: "Personne", type: "profile", required: true },
@@ -459,7 +465,7 @@ export default function Home() {
     const canRecordPayment = roles.some(role => ["ACCOUNTING","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE","DIRECTOR","ADMIN","PRE_ADMIN"].includes(role.code.toUpperCase()));
     const canRecordExpense = canRecordPayment;
     const canCreatePenalty = roles.some(role => ["DIRECTOR","ADMIN"].includes(role.code.toUpperCase()));
-    const canCreateActiveRecord = active === "payments" ? canRecordPayment : active === "expenses" ? canRecordExpense : active === "penalties" ? canCreatePenalty : (isAdmin || (isSecretary && active === "registrations"));
+    const canCreateActiveRecord = active === "payments" ? canRecordPayment : active === "expenses" ? canRecordExpense : active === "penalties" ? canCreatePenalty : active === "absenceRequests" ? isLearner : (isAdmin || (isSecretary && active === "registrations"));
     if (!canCreateActiveRecord || !createFields[active]) return;
     setBusy(true); setError(""); setNotice("");
     const payload: Record<string, unknown> = {};
@@ -471,6 +477,7 @@ export default function Home() {
       else payload[field.name] = value || null;
     }
     if (active === "registrations") { payload.created_by = user?.id; payload.submitted_at = new Date().toISOString(); }
+    if (active === "absenceRequests") { payload.person_id = user?.id; payload.status = "pending"; payload.submitted_at = new Date().toISOString(); payload.reviewed_by = null; payload.reviewed_at = null; }
     if (active === "expenses") { payload.created_by = user?.id; payload.amount_fcfa = Number(payload.amount_fcfa); payload.status = "recorded"; if (!Number.isSafeInteger(payload.amount_fcfa) || Number(payload.amount_fcfa) <= 0) { setError("Le montant de la dépense doit être un nombre entier positif en FCFA."); setBusy(false); return; } }
     if (active === "penalties") { payload.amount_fcfa = Number(payload.amount_fcfa); payload.status = payload.status || "pending"; }
     if (active === "payments") {
