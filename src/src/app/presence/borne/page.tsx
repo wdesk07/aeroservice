@@ -38,8 +38,7 @@ export default function PresenceKioskPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [deviceToken, setDeviceToken] = useState("");
-  const [deviceId, setDeviceId] = useState("");
+  const [deviceRegistered, setDeviceRegistered] = useState(false);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,10 +46,10 @@ export default function PresenceKioskPage() {
   const [result, setResult] = useState<AttendanceResult | null>(null);
 
   useEffect(() => {
-    const storedToken = window.sessionStorage.getItem("aero-presence-kiosk-token") || "";
-    const storedDeviceId = window.sessionStorage.getItem("aero-presence-kiosk-device-id") || "";
-    setDeviceToken(storedToken);
-    setDeviceId(storedDeviceId);
+    fetch("/api/presence/kiosk-status", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => setDeviceRegistered(Boolean(payload.activated)))
+      .catch(() => setDeviceRegistered(false));
 
     let alive = true;
     async function refreshIdentity(nextUser: User | null) {
@@ -85,15 +84,17 @@ export default function PresenceKioskPage() {
     setBusy(true);
     setMessage("");
     try {
-      const { data, error } = await supabase.rpc("activate_presence_kiosk", { p_name: "Borne officielle Aéro Service" });
-      if (error) throw new Error(error.message);
-      const payload = data as { ok?: boolean; device_token?: string; device_id?: string; device_name?: string };
-      if (!payload?.ok || !payload.device_token || !payload.device_id) throw new Error("Le serveur n’a pas confirmé l’activation.");
-      window.sessionStorage.setItem("aero-presence-kiosk-token", payload.device_token);
-      window.sessionStorage.setItem("aero-presence-kiosk-device-id", payload.device_id);
-      setDeviceToken(payload.device_token);
-      setDeviceId(payload.device_id);
-      setMessage("Borne activée sur cet appareil. Le code secret a été enregistré dans cette session du navigateur.");
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/presence/kiosk-activate", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.activated) throw new Error(payload?.error || "KIOSK_ACTIVATION_FAILED");
+      setDeviceRegistered(true);
+      setMessage("Borne activée sur cet appareil. Le secret est conservé dans un cookie sécurisé inaccessible au JavaScript.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Activation impossible."));
     } finally {
@@ -102,16 +103,19 @@ export default function PresenceKioskPage() {
   }
 
   async function revokeKiosk() {
-    if (!deviceId) return;
     setBusy(true);
     setMessage("");
     try {
-      const { error } = await supabase.rpc("revoke_presence_kiosk", { p_device_id: deviceId });
-      if (error) throw new Error(error.message);
-      window.sessionStorage.removeItem("aero-presence-kiosk-token");
-      window.sessionStorage.removeItem("aero-presence-kiosk-device-id");
-      setDeviceToken("");
-      setDeviceId("");
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/presence/kiosk-revoke", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "KIOSK_REVOKE_FAILED");
+      setDeviceRegistered(false);
       setMessage("Borne révoquée. Aucun nouveau pointage ne sera accepté depuis cet appareil.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Révocation impossible."));
@@ -136,7 +140,7 @@ export default function PresenceKioskPage() {
     setMessage("");
     setResult(null);
     try {
-      if (!deviceToken) throw new Error("KIOSK_NOT_REGISTERED");
+      if (!deviceRegistered) throw new Error("KIOSK_NOT_REGISTERED");
       const { data: authPayload, error: authError } = await supabase.functions.invoke("kiosk-auth", {
         body: { identifier: identifier.trim(), password }
       });
@@ -183,16 +187,21 @@ export default function PresenceKioskPage() {
 
     const submit = async (coords?: GeolocationPosition) => {
       try {
-        const args: Record<string, unknown> = { p_device_token: deviceToken };
-        if (coords) {
-          args.p_lat = coords.coords.latitude;
-          args.p_lng = coords.coords.longitude;
-          args.p_accuracy_m = coords.coords.accuracy;
-        }
-        const { data, error } = await supabase.rpc("kiosk_daily_checkin", args);
-        if (error) throw new Error(error.message);
-        const payload = data as AttendanceResult;
-        if (!payload?.ok) throw new Error("Le serveur n’a pas confirmé le pointage.");
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error("AUTH_REQUIRED");
+        const gps = coords ? {
+          latitude: coords.coords.latitude,
+          longitude: coords.coords.longitude,
+          accuracy: coords.coords.accuracy,
+        } : {};
+        const response = await fetch("/api/presence/kiosk-checkin", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(gps),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Le serveur n’a pas confirmé le pointage.");
         setResult(payload);
         setMessage(payload.duplicate ? "Votre présence avait déjà été enregistrée aujourd’hui." : "Pointage confirmé par le serveur.");
       } catch (error) {
@@ -239,7 +248,7 @@ export default function PresenceKioskPage() {
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
             <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction et à la pré-administration. L’activation lie cette session du navigateur à un dispositif autorisé.</p>
-            {deviceToken ? (
+            {deviceRegistered ? (
               <>
                 <p style={{ color: "#17663b", fontWeight: 700 }}>Cette session possède déjà un jeton de borne.</p>
                 <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Terminer la configuration et ouvrir le pointage apprenant</button>
@@ -254,7 +263,7 @@ export default function PresenceKioskPage() {
         {!loading && !user && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage apprenant</h2>
-            {!deviceToken ? (
+            {!deviceRegistered ? (
               <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Connectez-vous avec un compte Direction ou PRE_ADMIN sur la plateforme, puis ouvrez cette page pour enregistrer l’appareil.</p>
             ) : (
               <>
@@ -278,7 +287,7 @@ export default function PresenceKioskPage() {
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Confirmer votre présence</h2>
             <p style={{ lineHeight: 1.5 }}>Connecté : <strong>{user.email || "compte apprenant"}</strong></p>
             <p style={{ color: "#52647a", lineHeight: 1.5 }}>Le serveur vérifiera votre compte apprenant, la borne autorisée, l’horaire et l’absence de doublon.</p>
-            <button type="button" onClick={() => void recordPresence()} disabled={busy || !deviceToken} style={primaryButton}>{busy ? "Vérification…" : "Je suis présent — valider"}</button>
+            <button type="button" onClick={() => void recordPresence()} disabled={busy || !deviceRegistered} style={primaryButton}>{busy ? "Vérification…" : "Je suis présent — valider"}</button>
             <button type="button" onClick={() => void signOut()} disabled={busy} style={secondaryButton}>Ce n’est pas mon compte / Annuler</button>
           </div>
         )}
@@ -292,7 +301,7 @@ export default function PresenceKioskPage() {
           </div>
         )}
 
-        <p style={{ margin: "20px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.5 }}>Ne laissez pas cette page ouverte sans surveillance. Après chaque tentative de pointage, le compte apprenant est déconnecté automatiquement. Le code de borne reste limité à cette session de navigateur.</p>
+        <p style={{ margin: "20px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.5 }}>Ne laissez pas cette page ouverte sans surveillance. Après chaque tentative de pointage, le compte apprenant est déconnecté automatiquement. Le secret de la borne est conservé dans un cookie HttpOnly sécurisé, inaccessible au JavaScript de la page.</p>
       </section>
     </main>
   );
