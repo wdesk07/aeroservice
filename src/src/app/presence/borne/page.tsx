@@ -134,11 +134,22 @@ export default function PresenceKioskPage() {
     setResult(null);
     try {
       if (!deviceToken) throw new Error("KIOSK_NOT_REGISTERED");
-      const { data, error } = await supabase.auth.signInWithPassword({ email: identifier.trim(), password });
-      if (error || !data.user) throw new Error(error?.message || "Connexion impossible.");
+      const { data: authPayload, error: authError } = await supabase.functions.invoke("kiosk-auth", {
+        body: { identifier: identifier.trim(), password }
+      });
+      if (authError || !authPayload?.access_token || !authPayload?.refresh_token) {
+        const detail = authPayload?.error || authError?.message || "Invalid login credentials";
+        throw new Error(detail);
+      }
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+        access_token: authPayload.access_token,
+        refresh_token: authPayload.refresh_token
+      });
+      if (sessionError || !sessionData.user) throw new Error("Connexion impossible.");
+      const signedInUser = sessionData.user;
 
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("status").eq("id", data.user.id).maybeSingle();
-      const { data: rolesData } = await supabase.from("user_roles").select("roles(code)").eq("user_id", data.user.id);
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("status").eq("id", signedInUser.id).maybeSingle();
+      const { data: rolesData } = await supabase.from("user_roles").select("roles(code)").eq("user_id", signedInUser.id);
       const roleCodes = (rolesData ?? []).flatMap((entry: any) =>
         Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
       ).map((code: string) => code.toUpperCase());
@@ -148,7 +159,7 @@ export default function PresenceKioskPage() {
         throw new Error("Ce compte n’est pas autorisé à pointer comme apprenant actif.");
       }
 
-      setUser(data.user);
+      setUser(signedInUser);
       setPassword("");
       setMessage("Connexion réussie. Appuyez sur le bouton pour demander la validation de votre présence.");
     } catch (error) {
@@ -246,8 +257,8 @@ export default function PresenceKioskPage() {
               <>
                 <p style={{ color: "#52647a", lineHeight: 1.5 }}>Présentez-vous à la borne officielle. Le pointage personnel depuis un téléphone n’est pas autorisé. Le GPS est un contrôle complémentaire quand il est disponible.</p>
                 <form onSubmit={loginLearner} style={{ display: "grid", gap: 12 }}>
-                  <label style={labelStyle}>E-mail du compte apprenant
-                    <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="exemple@aeroservice.bj" />
+                  <label style={labelStyle}>E-mail ou identifiant apprenant
+                    <input autoComplete="username" type="text" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="E-mail ou matricule apprenant" />
                   </label>
                   <label style={labelStyle}>Mot de passe
                     <input autoComplete="current-password" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} style={inputStyle} />
