@@ -77,7 +77,7 @@ export default function Home() {
   const [active, setActive] = useState<ModuleKey>("dashboard");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "reset" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "reset" | "signup" | "recovery">("login");
   const [signupName, setSignupName] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
   const [signupFormation, setSignupFormation] = useState("");
@@ -180,7 +180,7 @@ export default function Home() {
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => { if (mounted) setUser(data.session?.user ?? null); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => { if (event === "PASSWORD_RECOVERY") { setMode("recovery"); setError(""); setNotice("Choisissez votre nouveau mot de passe puis enregistrez-le."); } setUser(session?.user ?? null); });
     return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
@@ -220,15 +220,31 @@ export default function Home() {
       options: { data: { display_name: signupName.trim(), first_name: parts.slice(0, -1).join(" "), last_name: parts[parts.length - 1], phone: signupPhone.trim(), requested_role: "STUDENT", signup_flow: "public_learner", formation_id: signupFormation } }
     });
     if (signupError || !data.user) { setError(signupError?.message || "Création du compte impossible."); setBusy(false); return; }
+    const { data: registrationResult, error: registrationError } = await supabase.functions.invoke("submit-registration", { body: { user_id: data.user.id } });
+    if (registrationError || registrationResult?.error || !registrationResult?.ok) {
+      await supabase.auth.signOut();
+      setError("Le compte a été créé, mais la demande n’a pas pu être enregistrée. Contactez le secrétariat avec cette adresse e-mail. " + (registrationResult?.detail || registrationResult?.error || registrationError?.message || ""));
+      setMode("login"); setPassword(""); setBusy(false); return;
+    }
     await supabase.auth.signOut();
-    setNotice("Votre compte a été créé et votre demande envoyée au secrétariat. Votre dossier est en attente de validation. Si un e-mail de confirmation est demandé, veuillez d’abord confirmer votre adresse.");
+    setNotice("Votre demande d’inscription a bien été enregistrée sous le numéro " + registrationResult.registration_number + ". Le dossier est en attente de validation par le secrétariat.");
     setMode("login"); setPassword(""); setSignupName(""); setSignupPhone(""); setSignupFormation("");
     setBusy(false);
   }
   async function handleReset(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
-    if (resetError) setError(resetError.message); else setNotice("Si cette adresse est enregistrée, un lien de réinitialisation sera envoyé.");
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + "/?flow=recovery" });
+    if (resetError) setError(resetError.message); else setNotice("Si cette adresse est enregistrée, un lien de réinitialisation sera envoyé. Ouvrez le dernier e-mail pour définir votre nouveau mot de passe.");
+    setBusy(false);
+  }
+  async function handlePasswordUpdate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setBusy(true); setError(""); setNotice("");
+    if (password.length < 8) { setError("Le nouveau mot de passe doit contenir au moins 8 caractères."); setBusy(false); return; }
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    if (updateError) { setError(updateError.message); setBusy(false); return; }
+    await supabase.auth.signOut();
+    setUser(null); setPassword(""); setMode("login");
+    setNotice("Votre nouveau mot de passe a été enregistré. Vous pouvez maintenant vous connecter.");
     setBusy(false);
   }
   async function handleSignOut() { await supabase.auth.signOut(); setActive("dashboard"); setNotice(""); }
@@ -723,7 +739,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [mode]);
 
-  if (!user) return <main className="login-screen">
+  if (!user || mode === "recovery") return <main className="login-screen">
     <section className="login-visual">
       <div className="brand"><div className="brand-mark"><img src="/logo-aero-services.jpg" alt="Logo Aéro Service" /></div><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Plateforme de gestion</div></div></div>
       <div className="login-visual-content"><div className="eyebrow" style={{color:"#9cc5ff"}}>FORMATION · ORGANISATION · SUIVI</div><h1>Prenez de la hauteur sur votre gestion.</h1><p>Un espace centralisé pour piloter les formations, suivre les apprenants et coordonner les opérations de votre établissement.</p><div className="login-bullets"><span>✦ Gestion pédagogique</span><span>✦ Suivi administratif</span><span>✦ Accès sécurisé</span></div></div>
@@ -731,13 +747,13 @@ export default function Home() {
     </section>
     <section className="login-form-side"><div className="login-card">
       <div className="brand" style={{padding:"0 0 30px"}}><div className="brand-mark" style={{background:"#ffffff",color:"#2474e5"}}><img src="/logo-aero-services.jpg" alt="Logo Aéro Service" /></div><div><div className="brand-name" style={{color:"#10243b"}}>AÉRO SERVICE</div><div className="brand-sub" style={{color:"#758396"}}>ESPACE DE CONNEXION</div></div></div>
-      <h2>{mode === "login" ? "Bon retour parmi nous" : mode === "signup" ? "Créer un compte apprenant" : "Réinitialiser le mot de passe"}</h2><p>{mode === "login" ? "Connectez-vous pour accéder à votre espace de travail." : mode === "signup" ? "Inscrivez-vous à une formation Aéro Service. Votre dossier sera vérifié par le secrétariat." : "Recevez un lien sécurisé par e-mail."}</p>
+      <h2>{mode === "login" ? "Bon retour parmi nous" : mode === "signup" ? "Créer un compte apprenant" : mode === "recovery" ? "Définir un nouveau mot de passe" : "Réinitialiser le mot de passe"}</h2><p>{mode === "login" ? "Connectez-vous pour accéder à votre espace de travail." : mode === "signup" ? "Inscrivez-vous à une formation Aéro Service. Votre dossier sera vérifié par le secrétariat." : mode === "recovery" ? "Saisissez votre nouveau mot de passe puis enregistrez-le pour terminer la récupération." : "Recevez un lien sécurisé par e-mail."}</p>
       {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
-      <form className="login-fields" onSubmit={mode === "login" ? handleLogin : mode === "signup" ? handleSignup : handleReset}>
+      <form className="login-fields" onSubmit={mode === "login" ? handleLogin : mode === "signup" ? handleSignup : mode === "recovery" ? handlePasswordUpdate : handleReset}>
         {mode === "signup" && <><label className="field">Nom et prénom<input type="text" autoComplete="name" required value={signupName} onChange={e=>setSignupName(e.target.value)} placeholder="Ex. Aïcha Dossou"/></label><label className="field">Téléphone<input type="tel" autoComplete="tel" value={signupPhone} onChange={e=>setSignupPhone(e.target.value)} placeholder="Ex. 01 90 00 00 00"/></label><label className="field">Formation souhaitée<select required value={signupFormation} onChange={e=>setSignupFormation(e.target.value)}><option value="">{publicFormations.length ? "Choisir une formation" : "Aucune formation disponible pour le moment"}</option>{publicFormations.map(item=><option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label></>}
-        <label className="field">Adresse e-mail<input type="email" autoComplete="email" placeholder="vous@exemple.com" required value={email} onChange={e=>setEmail(e.target.value)} /></label>
-        {mode !== "reset" && <label className="field">Mot de passe<input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={8} placeholder="8 caractères minimum" required value={password} onChange={e=>setPassword(e.target.value)} /></label>}
-        <button className="btn btn-primary" style={{width:"100%",padding:13,marginTop:4}} disabled={busy}>{busy ? "Veuillez patienter…" : mode === "login" ? "Se connecter  →" : mode === "signup" ? "Créer mon compte et envoyer la demande" : "Envoyer le lien"}</button>
+        {mode !== "recovery" && <label className="field">Adresse e-mail<input type="email" autoComplete="email" placeholder="vous@exemple.com" required value={email} onChange={e=>setEmail(e.target.value)} /></label>}
+        {mode !== "reset" && <label className="field">{mode === "recovery" ? "Nouveau mot de passe" : "Mot de passe"}<input type="password" autoComplete={mode === "signup" || mode === "recovery" ? "new-password" : "current-password"} minLength={8} placeholder={mode === "recovery" ? "Choisissez un nouveau mot de passe" : "8 caractères minimum"} required value={password} onChange={e=>setPassword(e.target.value)} /></label>}
+        <button className="btn btn-primary" style={{width:"100%",padding:13,marginTop:4}} disabled={busy}>{busy ? "Veuillez patienter…" : mode === "login" ? "Se connecter  →" : mode === "signup" ? "Créer mon compte et envoyer la demande" : mode === "recovery" ? "Enregistrer le nouveau mot de passe" : "Envoyer le lien"}</button>
       </form>
       <button className="link-btn" onClick={()=>{setMode(mode==="login"?"reset":"login");setError("");setNotice("");}}>{mode==="login"?"Mot de passe oublié ?":"← Retour à la connexion"}</button>
       {mode === "login" && <button className="link-btn" onClick={()=>{setMode("signup");setError("");setNotice("");setPassword("");}}>Créer un compte apprenant</button>}
