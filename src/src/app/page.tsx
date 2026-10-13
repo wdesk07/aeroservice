@@ -144,7 +144,11 @@ export default function Home() {
     if (!config?.table) { setRows([]); return; }
     setLoading(true); setError("");
     const cols = config.columns?.join(",") || "*";
-    const result = await supabase.from(config.table).select(cols).limit(100);
+    let query = supabase.from(config.table).select(cols);
+    if (key === "myAttendance") query = query.order("local_date", { ascending: false });
+    else if (key === "absenceRequests") query = query.order("submitted_at", { ascending: false });
+    else if (key === "payments" || key === "expenses" || key === "penalties") query = query.order("created_at", { ascending: false });
+    const result = await query.limit(100);
     if (result.error) {
       setRows([]);
       setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
