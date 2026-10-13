@@ -19,15 +19,15 @@ drop policy if exists "operating day read authorized roles" on public.operating_
 create policy "operating day read authorized roles"
   on public.operating_days for select to authenticated
   using (
-    private.is_admin_actor()
-    or private.has_any_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE','STAFF','PERSONNEL'])
+    public.is_admin_actor()
+    or public.has_any_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE','STAFF','PERSONNEL'])
   );
 
 create or replace function public.get_operating_day_status()
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = public, pg_temp
 as $$
 declare
   v_today date := (now() at time zone 'Africa/Porto-Novo')::date;
@@ -37,8 +37,8 @@ begin
     raise exception 'AUTHENTICATION_REQUIRED';
   end if;
   if not (
-    private.is_admin_actor()
-    or private.has_any_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE','STAFF','PERSONNEL'])
+    public.is_admin_actor()
+    or public.has_any_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE','STAFF','PERSONNEL'])
   ) then
     raise exception 'OPERATING_STATUS_FORBIDDEN';
   end if;
@@ -88,8 +88,8 @@ begin
   -- Only management and the pre-approved secretariat can perform these actions.
   -- Regular personnel, teachers and learners cannot open/close the establishment.
   if not (
-    private.is_admin_actor()
-    or private.has_any_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE'])
+    public.is_admin_actor()
+    or public.has_any_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY','SECRETAIRE','SECRÉTAIRE'])
   ) then
     raise exception 'OPERATING_ACTION_FORBIDDEN';
   end if;
