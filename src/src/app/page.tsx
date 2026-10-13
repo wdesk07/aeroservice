@@ -86,6 +86,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [operatingDay, setOperatingDay] = useState<Record<string, any> | null>(null);
   const [receiptPayment, setReceiptPayment] = useState<Record<string, unknown> | null>(null);
   const [counts, setCounts] = useState<Record<string, number | null>>({});
   const [financeTotals, setFinanceTotals] = useState<{today:number|null;month:number|null;year:number|null;pending:number|null;count:number|null}>({today:null,month:null,year:null,pending:null,count:null});
@@ -191,6 +192,15 @@ export default function Home() {
   }, [user, loadIdentity, loadCounts]);
 
   useEffect(() => {
+    if (!user || !roles.length) return;
+    if (roles.some(role => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE","STAFF","PERSONNEL"].includes(role.code.toUpperCase()))) {
+      void refreshOperatingDay();
+    } else {
+      setOperatingDay(null);
+    }
+  }, [user, roles]);
+
+  useEffect(() => {
     if (!user) return;
     if (!canAccessModule(active, roles.map(role => role.code))) {
       setActive("dashboard"); setRows([]); setShowCreate(false);
@@ -232,6 +242,34 @@ export default function Home() {
     setBusy(false);
   }
   async function handleSignOut() { await supabase.auth.signOut(); setActive("dashboard"); setNotice(""); }
+
+  async function refreshOperatingDay() {
+    if (!user) { setOperatingDay(null); return; }
+    const { data, error: statusError } = await supabase.rpc("get_operating_day_status");
+    if (!statusError && data && typeof data === "object") setOperatingDay(data as Record<string, any>);
+  }
+
+  async function operateEstablishment(action: "open" | "close") {
+    setBusy(true); setError(""); setNotice("");
+    const { data, error: actionError } = await supabase.rpc("operate_aero_service", { p_action: action });
+    if (actionError) {
+      const message = actionError.message || "";
+      const known: Record<string, string> = {
+        ALREADY_OPEN: "Aéro Service est déjà ouvert aujourd’hui.",
+        ALREADY_CLOSED_TODAY: "La journée a déjà été fermée. La réouverture le même jour n’est pas autorisée.",
+        NOT_OPENED_YET: "Ouvrez d’abord la journée avant de la fermer.",
+        ALREADY_CLOSED: "Aéro Service est déjà fermé aujourd’hui.",
+        OPERATING_ACTION_FORBIDDEN: "Votre rôle ne permet pas d’ouvrir ou de fermer Aéro Service.",
+        OPERATING_STATUS_FORBIDDEN: "Votre rôle ne permet pas de consulter ce statut."
+      };
+      const code = Object.keys(known).find(key => message.includes(key));
+      setError(code ? known[code] : "Action impossible. Vérifiez que la migration des contrôles d’ouverture/fermeture a été installée dans l’environnement de test.");
+    } else {
+      setOperatingDay((data && typeof data === "object") ? data as Record<string, any> : null);
+      setNotice(action === "open" ? "Ouverture enregistrée. L’heure et le compte responsable sont conservés." : "Fermeture enregistrée. L’historique de la journée est conservé.");
+    }
+    setBusy(false);
+  }
   const createFields: Record<string, { name: string; label: string; type?: string; required?: boolean; options?: { label: string; value: string }[] }[]> = {
     students: [
       { name: "id", label: "Profil de l’apprenant", type: "profile", required: true },
@@ -712,6 +750,7 @@ export default function Home() {
   const visibleModules = modules.filter(m => canAccessModule(m.key, roleCodes));
   const isLearner = roleCodes.some(code => ["STUDENT","APPRENANT"].includes(code));
   const roleLabel = isAdmin ? "Direction / Administration" : isSecretary || roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) ? "Secrétariat / Finances" : roleCodes.some(code => ["PEDAGOGY","PEDAGOGIE"].includes(code)) ? "Pédagogie" : roleCodes.some(code => ["TEACHER","ENSEIGNANT"].includes(code)) ? "Enseignant" : roleCodes.some(code => ["STAFF","PERSONNEL"].includes(code)) ? "Personnel" : isLearner ? "Apprenant" : "Accès à définir";
+  const canOperateDay = roles.some(r => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE"].includes(r.code.toUpperCase()));
 
   useEffect(() => {
     if (mode !== "signup") return;
@@ -768,6 +807,25 @@ export default function Home() {
         {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
         {active==="dashboard" && <>
           <div className="page-heading"><div><div className="eyebrow">ESPACE PERSONNEL · {roleLabel.toUpperCase()}</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">{isAdmin ? "Vue globale de l’établissement et accès aux fonctions administratives." : isSecretary ? "Espace secrétariat : inscriptions, suivi des paiements et validation des accès apprenants." : isLearner ? "Votre espace apprenant personnel." : "Retrouvez les outils correspondant à votre fonction."}</p></div>{isAdmin && <button className="btn btn-primary" onClick={()=>{setActive("formations");setShowCreate(true);}}>＋ Nouvelle formation</button>}</div>
+          {operatingDay && !isLearner && <div className="panel" style={{marginBottom:18}}>
+            <div className="panel-head">
+              <div><div className="panel-title">Ouverture et fermeture d’Aéro Service</div><div className="panel-desc">Heure de référence : Bénin (Africa/Porto-Novo) · Ouverture cible 08 h 30 · Début des cours 09 h 00 · Fin des cours 19 h 00 · Fermeture cible 20 h 30</div></div>
+              <span className={"pill " + (operatingDay.status === "open" ? "active" : "pending")}>{operatingDay.status === "open" ? "Établissement ouvert" : operatingDay.status === "closed" ? "Établissement fermé" : "Journée non ouverte"}</span>
+            </div>
+            <div className="panel-body">
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:14}}>
+                <div><div className="stat-foot">Date locale</div><strong>{String(operatingDay.business_date || "—")}</strong></div>
+                <div><div className="stat-foot">Ouverture enregistrée</div><strong>{operatingDay.opened_at ? new Date(operatingDay.opened_at).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Porto-Novo"}) : "Non enregistrée"}</strong></div>
+                <div><div className="stat-foot">Fermeture enregistrée</div><strong>{operatingDay.closed_at ? new Date(operatingDay.closed_at).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Porto-Novo"}) : "En attente"}</strong></div>
+              </div>
+              {canOperateDay ? <div className="form-actions">
+                <button className="btn btn-primary" disabled={busy || operatingDay.status === "open" || operatingDay.status === "closed"} onClick={() => void operateEstablishment("open")}>Ouvrir Aéro Service</button>
+                <button className="btn" disabled={busy || operatingDay.status !== "open"} onClick={() => void operateEstablishment("close")}>Fermer Aéro Service</button>
+                <button className="btn btn-quiet" disabled={busy} onClick={() => void refreshOperatingDay()}>Actualiser le statut</button>
+              </div> : <div className="stat-foot">Consultation uniquement. L’ouverture et la fermeture sont réservées à la Direction et au Secrétariat autorisé.</div>}
+              <p className="stat-foot" style={{marginTop:12}}>Les boutons enregistrent l’heure réelle et le compte responsable. Les contrôles automatiques des présences et des absences restent distincts et doivent être activés côté serveur.</p>
+            </div>
+          </div>}
           {!isLearner && roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) && <div className="stats-grid">
             {[{label:"Recettes aujourd’hui",value:financeTotals.today,icon:"₣",foot:"Paiements validés · FCFA"},{label:"Recettes du mois",value:financeTotals.month,icon:"▦",foot:"Depuis le 1er du mois · FCFA"},{label:"Recettes de l’année",value:financeTotals.year,icon:"↗",foot:"Depuis le 1er janvier · FCFA"},{label:"Paiements en attente",value:financeTotals.pending,icon:"◷",foot:"À contrôler / valider"}].map(item=><div className="stat-card" key={item.label}><div className="stat-top"><span>{item.label}</span><span className="stat-icon">{item.icon}</span></div><div className="stat-number">{item.value===null?"—":item.value.toLocaleString("fr-FR")}</div><div className="stat-foot">{item.foot}</div></div>)}
           </div>}
