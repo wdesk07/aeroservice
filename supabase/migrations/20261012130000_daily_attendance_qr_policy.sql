@@ -135,6 +135,9 @@ begin
 
   v_local := v_now at time zone 'Africa/Porto-Novo';
   v_local_date := v_local::date;
+  if v_person_type = 'student' and v_local::time >= time '19:00' then
+    raise exception 'STUDENT_CHECKIN_CLOSED';
+  end if;
   -- Student tolerance includes the entire 09:15 minute; lateness starts at 09:16.
   -- Staff are on time throughout the 08:30 minute; lateness starts at 08:31.
   v_status := case
