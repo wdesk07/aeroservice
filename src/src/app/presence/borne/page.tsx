@@ -177,7 +177,7 @@ export default function PresenceKioskPage() {
   }
 
   async function recordPresence() {
-    if (!deviceToken || !user) {
+    if (!deviceRegistered || !user) {
       setMessage("La borne doit être activée et l’apprenant doit être connecté.");
       return;
     }
