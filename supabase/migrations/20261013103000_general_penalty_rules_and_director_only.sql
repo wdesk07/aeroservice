@@ -59,6 +59,13 @@ create policy "penalties manage director only"
   using (public.has_any_role(array['DIRECTOR']::text[]))
   with check (public.has_any_role(array['DIRECTOR']::text[]));
 
+-- PRE_ADMIN retains cross-space visibility but cannot create, edit or cancel penalties.
+create policy "pre_admin read penalties"
+  on public.penalties
+  for select
+  to authenticated
+  using (public.has_any_role(array['PRE_ADMIN']::text[]));
+
 drop policy if exists "penalty rules manage admin" on public.penalty_rules;
 drop policy if exists "pre_admin_full_access" on public.penalty_rules;
 
@@ -68,3 +75,10 @@ create policy "penalty rules manage director only"
   to authenticated
   using (public.has_any_role(array['DIRECTOR']::text[]))
   with check (public.has_any_role(array['DIRECTOR']::text[]));
+
+-- PRE_ADMIN can inspect configuration as part of the system-maintenance role.
+create policy "pre_admin read penalty rules"
+  on public.penalty_rules
+  for select
+  to authenticated
+  using (public.has_any_role(array['PRE_ADMIN']::text[]));
