@@ -93,6 +93,7 @@ declare
   v_status text;
   v_minutes integer;
   v_row public.daily_attendance%rowtype;
+  v_inserted boolean := false;
 begin
   if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
   if p_device_token is null or length(p_device_token) < 40 then raise exception 'KIOSK_NOT_REGISTERED'; end if;
@@ -154,10 +155,11 @@ begin
   )
   on conflict (person_id, local_date) do nothing
   returning * into v_row;
+  v_inserted := found;
 
   update public.presence_kiosk_devices set last_used_at = v_now where id = v_device.id;
 
-  if not found then
+  if not v_inserted then
     select * into v_row from public.daily_attendance
     where person_id = v_uid and local_date = v_local_date;
     return jsonb_build_object(
