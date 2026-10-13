@@ -79,3 +79,16 @@
 4. Ajouter les tests unitaires et les scénarios d'intégration.
 5. Exécuter les tests et inspecter les journaux dans l'environnement de test.
 6. Présenter le lien de prévisualisation et les résultats avant toute décision de production.
+
+
+## Avancement de la branche `feat/aero-presence-kiosk`
+
+- [x] Architecture et contrôles documentés avant toute migration.
+- [x] Point d'entrée « Consulter mes présences » ajouté au tableau de bord apprenant.
+- [x] Module « Mes présences » autorisé uniquement pour les rôles `STUDENT`/`APPRENANT` et limité par la politique RLS à l'historique personnel.
+- [x] Build de prévisualisation Vercel réussi pour le commit `fa69644e74be09d4c8d670bdedce11a56a58ca01`.
+- [ ] Route de borne et activation/révocation d'appareil.
+- [ ] Contrôle serveur qui refuse les pointages venant d'un appareil non enregistré.
+- [ ] Migration et fonctions serveur testées dans `aero-service-test`.
+- [ ] Tests d'intégration, vérification RLS/RPC et test manuel de bout en bout.
+- [ ] Aucun changement de production n'est autorisé à ce stade.
