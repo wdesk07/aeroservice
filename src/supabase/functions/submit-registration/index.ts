@@ -31,6 +31,14 @@ Deno.serve(async (req: Request) => {
   if (userError || !user || user.user_metadata?.signup_flow !== "public_learner" || user.user_metadata?.requested_role !== "STUDENT") {
     return reply(403, { error: "REGISTRATION_NOT_ALLOWED" });
   }
+  const { data: assignedRoles, error: assignedRolesError } = await admin.from("user_roles").select("roles(code)").eq("user_id", user.id);
+  if (assignedRolesError) return reply(503, { error: "ROLE_LOOKUP_FAILED" });
+  const existingRoleCodes = (assignedRoles ?? []).flatMap((item: any) => Array.isArray(item.roles) ? item.roles : item.roles ? [item.roles] : []).map((role: any) => String(role.code).toUpperCase());
+  if (existingRoleCodes.some((code: string) => !["STUDENT", "APPRENANT"].includes(code))) return reply(403, { error: "REGISTRATION_NOT_ALLOWED" });
+  const { data: studentRole, error: studentRoleError } = await admin.from("roles").select("id").eq("code", "STUDENT").maybeSingle();
+  if (studentRoleError || !studentRole) return reply(503, { error: "STUDENT_ROLE_NOT_CONFIGURED" });
+  const { error: assignRoleError } = await admin.from("user_roles").upsert({ user_id: user.id, role_id: studentRole.id }, { onConflict: "user_id,role_id", ignoreDuplicates: true });
+  if (assignRoleError) return reply(500, { error: "ROLE_ASSIGNMENT_FAILED" });
   const formationId = typeof user.user_metadata?.formation_id === "string" ? user.user_metadata.formation_id : "";
   if (!formationId) return reply(400, { error: "FORMATION_REQUIRED" });
   const { data: formation, error: formationError } = await admin.from("formations")
