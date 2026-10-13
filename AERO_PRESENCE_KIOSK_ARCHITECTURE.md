@@ -92,3 +92,23 @@
 - [ ] Migration et fonctions serveur testées dans `aero-service-test`.
 - [ ] Tests d'intégration, vérification RLS/RPC et test manuel de bout en bout.
 - [ ] Aucun changement de production n'est autorisé à ce stade.
+
+
+## Mise en œuvre réalisée dans la branche de test
+
+- [x] Migration `20261013145325_presence_kiosk` appliquée uniquement au projet `aero-service-test` (`nuijzdqnhjzcnqpfqvvl`).
+- [x] Table des bornes enregistrées avec jeton stocké uniquement sous forme de hash, état de révocation et dernière utilisation.
+- [x] RPC d'activation et de révocation protégées par les rôles Direction / ADMIN / PRE_ADMIN.
+- [x] RPC de pointage quotidien qui exige une borne active et un compte apprenant actif; vérification de la fenêtre horaire, prévention des doublons et journalisation.
+- [x] Fonction publique de pointage QR personnel désactivée dans la base de test; la page QR indique désormais que le pointage doit se faire sur la borne.
+- [x] Page `/presence/borne` avec activation admin, connexion apprenant par e-mail ou matricule et confirmation de présence.
+- [x] Jeton de borne conservé dans un cookie `HttpOnly`, `Secure`, `SameSite=Strict`, inaccessible au JavaScript; opérations de pointage/revocation via routes serveur.
+- [x] Fonction Edge `kiosk-auth` déployée sur le projet Supabase de test, avec contrôle de l'identifiant, du mot de passe, du statut apprenant et une limitation de tentatives par IP hashée.
+- [x] Routes serveur `/api/presence/kiosk-activate`, `kiosk-checkin`, `kiosk-revoke` et `kiosk-status`.
+- [x] Contrôles SQL en lecture seule confirmés : tables/fonctions présentes, anon ne peut pas activer ou pointer, rôle authenticated ne peut pas lire les jetons, et l'exécution du RPC QR est révoquée.
+- [x] Build Vercel de la prévisualisation réussi pour le commit `c8d26299dfaacd5b8f4eec18fd931e2de795c900`.
+- [ ] Test manuel de bout en bout avec comptes fictifs (activation Direction, connexion apprenant, pointage, doublon, révoquer borne).
+- [ ] Tester la géolocalisation réelle sur l'ordinateur du centre et décider si le point GPS est configuré; GPS complémentaire ne doit pas bloquer une borne officielle si la localisation n'est pas disponible.
+- [ ] Vérifier le comportement de l'authentification de borne derrière la protection Vercel et la politique de partage du lien de prévisualisation.
+- [ ] Le mode hors ligne reste hors périmètre.
+- [ ] Aucun déploiement ni migration en production n'a été effectué.
