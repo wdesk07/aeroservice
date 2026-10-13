@@ -27,7 +27,7 @@ create or replace function public.get_operating_day_status()
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   v_today date := (now() at time zone 'Africa/Porto-Novo')::date;
@@ -71,7 +71,7 @@ create or replace function public.operate_aero_service(p_action text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = ''
 as $$
 declare
   v_today date := (now() at time zone 'Africa/Porto-Novo')::date;
