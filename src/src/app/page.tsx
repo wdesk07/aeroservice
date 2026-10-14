@@ -716,8 +716,8 @@ export default function Home() {
     const justificationId = String(justification.id ?? "");
     if (!justificationId) { setError("Demande incomplète : identifiant manquant."); return; }
     setBusy(true); setError(""); setNotice("");
-    const { error: reviewError } = await supabase.from("absence_justifications").update({ status: decision, reviewed_by: user.id, reviewed_at: new Date().toISOString(), review_comment: null }).eq("id", justificationId).eq("status", "pending");
-    if (reviewError) setError("La décision n’a pas été enregistrée : " + reviewError.message);
+    const { data: updated, error: reviewError } = await supabase.from("absence_justifications").update({ status: decision, reviewed_by: user.id, reviewed_at: new Date().toISOString(), review_comment: null }).eq("id", justificationId).eq("status", "pending").select("id").maybeSingle();
+    if (reviewError || !updated) setError("La décision n’a pas été confirmée. La demande a peut-être déjà été traitée ou vos droits sont insuffisants. " + (reviewError?.message || ""));
     else { setNotice(decision === "approved" ? "Justification approuvée. L’apprenant verra le statut « approved » dans son espace." : "Justification rejetée. L’apprenant verra le statut « rejected » dans son espace."); await loadRows("absenceReviews"); }
     setBusy(false);
   }
