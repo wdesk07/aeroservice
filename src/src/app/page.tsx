@@ -46,13 +46,13 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 const escapeHtml = (value: unknown) => String(value ?? "—").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\x27/g,"&#39;");
 
 const roleModules: Record<string, ModuleKey[]> = {
-  DIRECTOR: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","penalties","payments","staff","roles","settings"],
-  ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","penalties","payments","staff","roles","settings"],
-  PRE_ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","penalties","payments","staff","roles","settings"],
-  SECRETARY: ["dashboard","students","registrations","attendance","penalties","payments","settings"],
-  SECRETARIAT: ["dashboard","students","registrations","attendance","penalties","payments","settings"],
-  SECRETAIRE: ["dashboard","students","registrations","attendance","penalties","payments","settings"],
-  "SECRÉTAIRE": ["dashboard","students","registrations","attendance","penalties","payments","settings"],
+  DIRECTOR: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceReviews","penalties","payments","staff","roles","settings"],
+  ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceReviews","penalties","payments","staff","roles","settings"],
+  PRE_ADMIN: ["dashboard","students","teachers","formations","groups","subjects","rooms","registrations","attendance","absenceReviews","penalties","payments","staff","roles","settings"],
+  SECRETARY: ["dashboard","students","registrations","attendance","absenceReviews","penalties","payments","settings"],
+  SECRETARIAT: ["dashboard","students","registrations","attendance","absenceReviews","penalties","payments","settings"],
+  SECRETAIRE: ["dashboard","students","registrations","attendance","absenceReviews","penalties","payments","settings"],
+  "SECRÉTAIRE": ["dashboard","students","registrations","attendance","absenceReviews","penalties","payments","settings"],
   PEDAGOGY: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
   PEDAGOGIE: ["dashboard","students","teachers","formations","groups","subjects","attendance","settings"],
   TEACHER: ["dashboard","groups","subjects","attendance","formations","settings"],
