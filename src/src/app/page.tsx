@@ -137,6 +137,16 @@ export default function Home() {
     setLoading(true); setError("");
     const cols = config.columns?.join(",") || "*";
     let query = supabase.from(config.table).select(cols).limit(100);
+    if (key === "myAttendance") query = query.eq("person_id", user?.id ?? "").eq("person_type", "student").order("local_date", { ascending: false });
+    if (key === "myAbsences") query = query.eq("person_id", user?.id ?? "").order("submitted_at", { ascending: false });
+    if (key === "myCourses") {
+      const { data: studentRecord, error: studentError } = await supabase.from("students").select("formation_id,group_id").eq("id", user?.id ?? "").maybeSingle();
+      if (studentError || !studentRecord || (!studentRecord.formation_id && !studentRecord.group_id)) {
+        setRows([]); setError(studentError ? "Impossible de charger votre inscription : " + studentError.message : "Aucune formation ou aucun groupe n’est encore associé à votre compte. Contactez le secrétariat."); setLoading(false); return;
+      }
+      const conditions = [studentRecord.group_id ? "group_id.eq." + studentRecord.group_id : "", studentRecord.formation_id ? "and(group_id.is.null,formation_id.eq." + studentRecord.formation_id + ")" : ""].filter(Boolean);
+      query = query.select("id,session_date,planned_start,planned_end,formation_id,group_id,status").or(conditions.join(",")).neq("status","cancelled").order("session_date",{ascending:true});
+    }
     // Contextual links from a late alert pass the learner's profile UUID.
     // Apply that filter at the database query as well as the visible search.
     const contextId = search.trim();
@@ -150,7 +160,7 @@ export default function Home() {
       setError("Impossible de charger ce module. Détail technique : " + (result.error.code || "erreur") + " — " + result.error.message);
     } else setRows((result.data ?? []) as unknown as Record<string, unknown>[]);
     setLoading(false);
-  }, [roles, search]);
+  }, [roles, search, user?.id]);
 
   useEffect(() => {
     if (!user || !roles.some(role => ["ACCOUNTING", "FINANCE"].includes(role.code.toUpperCase()))) {
