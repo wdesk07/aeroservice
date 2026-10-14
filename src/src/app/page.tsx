@@ -39,7 +39,7 @@ const metrics = [
   { label: "Inscriptions", table: "registrations", icon: "▣", foot: "Demandes enregistrées" }
 ];
 const pretty = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-const statusClass = (v: string) => { const status = v.toLowerCase(); if (["active", "approved", "success", "validated", "present", "paid", "on_time"].includes(status)) return "active"; if (status === "regularized_late") return "regularized_late"; if (["pending", "submitted", "pre_review"].includes(status)) return "pending"; if (status === "late") return "late"; if (["suspended", "rejected", "inactive", "absent"].includes(status)) return "rejected"; return ""; };
+const statusClass = (v: string) => { const status = v.toLowerCase(); if (["active", "approved", "success", "validated", "present", "paid", "on_time"].includes(status)) return "active"; if (status === "regularized_late" || status === "regularized") return "regularized_late"; if (["pending", "submitted", "pre_review"].includes(status)) return "pending"; if (status === "late") return "late"; if (["suspended", "rejected", "inactive", "absent"].includes(status)) return "rejected"; return ""; };
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]?.toUpperCase()).join("") || "AS";
 const escapeHtml = (value: unknown) => String(value ?? "—").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\x27/g,"&#39;");
 
@@ -531,17 +531,40 @@ export default function Home() {
     const { plannedAt, arrivedAt, delayMinutes, amount } = validation;
     const personLabel = lateForm.person_type === "staff" ? "Personnel" : "Apprenant";
     const note = `${personLabel} — retard ${delayMinutes} min. Montant payé : ${amount.toLocaleString("fr-FR")} FCFA. Accès autorisé par le secrétariat après validation du règlement.${lateForm.reason.trim() ? " Motif : " + lateForm.reason.trim() : ""}`;
-    const attendanceResult = await supabase.from("attendance").insert({
-      person_id: lateForm.person_id, person_type: lateForm.person_type,
-      status: "late", planned_at: plannedAt.toISOString(), arrived_at: arrivedAt.toISOString(),
-      delay_minutes: delayMinutes, access_blocked: true, source: "secretariat",
-      anomaly: true, anomaly_reason: note
-    }).select("id").single();
-    if (attendanceResult.error || !attendanceResult.data) {
-      setError(attendanceResult.error?.message || "Le retard n’a pas pu être enregistré.");
+    const localDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Porto-Novo", year: "numeric", month: "2-digit", day: "2-digit"
+    }).format(arrivedAt);
+    const { data: existingDaily, error: existingDailyError } = await supabase
+      .from("daily_attendance").select("id,status,person_type,nominal_time,cutoff_time")
+      .eq("person_id", lateForm.person_id).eq("local_date", localDate).maybeSingle();
+    if (existingDailyError) {
+      setError("Impossible de vérifier le pointage du jour. Aucun paiement ni déblocage n’a été effectué. Détail : " + existingDailyError.message);
       setBusy(false); return;
     }
-    const automaticPenalty = await supabase.from("penalties").select("id,amount_fcfa,status").eq("attendance_id", attendanceResult.data.id).maybeSingle();
+    if (existingDaily && existingDaily.status !== "late") {
+      setError("Un pointage existe déjà pour cette personne aujourd’hui avec le statut « " + existingDaily.status + " ». Aucun doublon ni paiement n’a été créé.");
+      setBusy(false); return;
+    }
+    let dailyAttendanceId = existingDaily?.id as string | undefined;
+    if (!dailyAttendanceId) {
+      const { data: insertedDaily, error: insertDailyError } = await supabase.from("daily_attendance").insert({
+        person_id: lateForm.person_id,
+        local_date: localDate,
+        person_type: lateForm.person_type,
+        nominal_time: policy.nominalTime,
+        cutoff_time: lateForm.person_type === "student" ? "09:15:00" : "08:30:00",
+        arrived_at: arrivedAt.toISOString(),
+        status: "late",
+        minutes_after_cutoff: Math.max(0, delayMinutes - (lateForm.person_type === "student" ? 15 : 30))
+      }).select("id").single();
+      if (insertDailyError || !insertedDaily) {
+        setError("Le retard n’a pas pu être lié au pointage quotidien. Aucun paiement ni déblocage n’a été effectué. Détail : " + (insertDailyError?.message || "pointage introuvable"));
+        setBusy(false); return;
+      }
+      dailyAttendanceId = insertedDaily.id;
+    }
+    const attendanceResult = { data: { id: dailyAttendanceId }, error: null as null };
+    const automaticPenalty = await supabase.from("penalties").select("id,amount_fcfa,status").eq("daily_attendance_id", attendanceResult.data.id).maybeSingle();
     if (automaticPenalty.error) {
       setError("Le pointage est enregistré, mais la pénalité automatique n’a pas pu être vérifiée. Aucun accès n’est autorisé. Détail : " + automaticPenalty.error.message);
       await loadRows("attendance"); setBusy(false); return;
@@ -555,8 +578,8 @@ export default function Home() {
     const paymentAmount = settlementPlan.paymentAmount;
     if (settlementPlan.needsPenalty) {
       const penaltyResult = await supabase.from("penalties").insert({
-        attendance_id: attendanceResult.data.id, person_id: lateForm.person_id,
-        amount_fcfa: amount, status: "pending", penalty_type: "late_arrival"
+        daily_attendance_id: attendanceResult.data.id, person_id: lateForm.person_id,
+        amount_fcfa: amount, status: "pending", penalty_type: "late_arrival", description: note
       }).select("id").single();
       if (penaltyResult.error || !penaltyResult.data) {
         setError("Le retard est enregistré, mais le dossier de règlement n’a pas pu être créé. L’accès reste bloqué. Détail : " + (penaltyResult.error?.message || "erreur inconnue"));
@@ -592,18 +615,17 @@ export default function Home() {
       setError("Le paiement a été créé, mais sa validation n’a pas été confirmée par la base. La pénalité reste à régler et l’accès reste bloqué. Détail : " + (validationResult.error?.message || "Aucune ligne validée n’a été retournée."));
       await loadRows("attendance"); await loadRows("penalties"); await loadRows("payments"); setBusy(false); return;
     }
-    const accessResult = await supabase.from("attendance").update({
-      status: "regularized_late", access_blocked: false,
-      anomaly_reason: note + " Paiement validé. Accès autorisé."
-    }).eq("id", attendanceResult.data.id);
+    const accessResult = await supabase.from("daily_attendance").update({
+      status: "regularized"
+    }).eq("id", attendanceResult.data.id).eq("status", "late");
     if (accessResult.error) {
       setError("Le paiement est validé, mais la mise à jour de l’autorisation d’accès a échoué. Prévenez l’administration. Détail : " + accessResult.error.message);
     } else {
       await supabase.from("attendance_events").insert({
-        attendance_id: attendanceResult.data.id, person_id: lateForm.person_id,
+        attendance_id: null, person_id: lateForm.person_id,
         event_type: "regularized", occurred_at: new Date().toISOString(),
         source: "secretariat", created_by: user.id,
-        metadata: { person_type: lateForm.person_type, delay_minutes: delayMinutes, amount_fcfa: amount, payment_method: lateForm.method, payment_status: "validated", authorized_by: user.id, access_authorized: true, reason: lateForm.reason.trim() || null }
+        metadata: { daily_attendance_id: attendanceResult.data.id, person_type: lateForm.person_type, delay_minutes: delayMinutes, amount_fcfa: amount, payment_method: lateForm.method, payment_status: "validated", authorized_by: user.id, access_authorized: true, reason: lateForm.reason.trim() || null }
       });
       setNotice(`Retard enregistré : ${delayMinutes} minute(s). Paiement de ${paymentAmount.toLocaleString("fr-FR")} FCFA validé. Accès autorisé — dossier affiché en jaune.`);
       setLateForm({ person_type: "student", person_id: "", planned_time: "09:00", arrived_time: "", amount_fcfa: "", method: "cash", provider: "", transaction_reference: "", reason: "" });
