@@ -21,7 +21,10 @@ function errorMessage(raw: string) {
   const messages: Record<string, string> = {
     AUTH_REQUIRED: "La session a expiré. Reconnectez-vous sur la borne.",
     KIOSK_NOT_REGISTERED: "Cette borne n’est pas activée. Demandez à la Direction de l’enregistrer.",
-    KIOSK_ADMIN_REQUIRED: "Seule la Direction ou la pré-administration peut activer une borne.",
+    KIOSK_ADMIN_REQUIRED: "Seule la Direction ou la pré-administration peut ouvrir ou fermer la journée et gérer la borne.",
+    OPERATING_DAY_CLOSED: "La journée est fermée. La Direction doit ouvrir la journée et activer la borne.",
+    OPERATING_DAY_ALREADY_CLOSED: "La journée est déjà fermée. La borne ne peut plus être activée aujourd’hui.",
+    OPERATING_DAY_NOT_OPEN: "Aucune journée ouverte à fermer. Ouvrez d’abord la journée et activez la borne.",
     INVALID_CREDENTIALS: "Identifiant ou mot de passe incorrect, ou compte apprenant non autorisé.",
     TOO_MANY_ATTEMPTS: "Trop de tentatives. Attendez quinze minutes avant de réessayer.",
     SERVICE_UNAVAILABLE: "Le service de connexion est temporairement indisponible. Réessayez plus tard.",
@@ -94,7 +97,7 @@ export default function PresenceKioskPage() {
       const payload = await response.json();
       if (!response.ok || !payload?.activated) throw new Error(payload?.error || "KIOSK_ACTIVATION_FAILED");
       setDeviceRegistered(true);
-      setMessage("Borne activée sur cet appareil. Le secret est conservé dans un cookie sécurisé inaccessible au JavaScript.");
+      setMessage("Journée ouverte et borne activée. Le jeton est conservé dans un cookie sécurisé inaccessible au JavaScript.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Activation impossible."));
     } finally {
@@ -116,7 +119,7 @@ export default function PresenceKioskPage() {
       const payload = await response.json();
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "KIOSK_REVOKE_FAILED");
       setDeviceRegistered(false);
-      setMessage("Borne révoquée. Aucun nouveau pointage ne sera accepté depuis cet appareil.");
+      setMessage("Journée fermée. Les jetons actifs de borne sont révoqués et aucun nouveau pointage ne sera accepté.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Révocation impossible."));
     } finally {
@@ -254,12 +257,12 @@ export default function PresenceKioskPage() {
         {!loading && user && isAdmin && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
-            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction et à la pré-administration. L’activation lie cette session du navigateur à un dispositif autorisé.</p>
+            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction et à la pré-administration. L’ouverture de la journée active cette borne et crée un jeton sécurisé; la fermeture révoque les jetons actifs.</p>
             {deviceRegistered ? (
               <>
                 <p style={{ color: "#17663b", fontWeight: 700 }}>Cette session possède déjà un jeton de borne.</p>
                 <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Terminer la configuration et ouvrir le pointage apprenant</button>
-                <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Révoquer cette borne</button>
+                <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Fermer la journée et révoquer la borne</button>
               </>
             ) : (
               <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Activation…" : "Activer cet ordinateur comme borne"}</button>
