@@ -13,7 +13,7 @@ const supabase: SupabaseClient = createClient(
 
 type Profile = { id: string; public_id?: string | null; first_name?: string | null; last_name?: string | null; display_name?: string | null; email?: string | null; status?: string };
 type Role = { code: string; name: string };
-type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups" | "subjects" | "rooms" | "registrations" | "attendance" | "myAttendance" | "penalties" | "payments" | "staff" | "roles" | "settings";
+type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups" | "subjects" | "rooms" | "registrations" | "attendance" | "myCourses" | "myAttendance" | "myAbsences" | "penalties" | "payments" | "staff" | "roles" | "settings";
 type ModuleConfig = { key: ModuleKey; label: string; icon: string; table?: string; columns?: string[]; description: string; section: string };
 const modules: ModuleConfig[] = [
   { key: "dashboard", label: "Vue d’ensemble", icon: "⌂", description: "Les indicateurs essentiels de votre établissement.", section: "PILOTAGE" },
@@ -25,7 +25,9 @@ const modules: ModuleConfig[] = [
   { key: "rooms", label: "Salles", icon: "⌂", table: "rooms", columns: ["code", "name", "capacity", "location_description", "status"], description: "Salles et espaces de formation.", section: "ORGANISATION" },
   { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["id", "registration_number", "person_id", "formation_id", "group_id", "registration_date", "status", "submitted_at", "review_comment"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
   { key: "attendance", label: "Présences", icon: "◷", table: "daily_attendance", columns: ["local_date", "person_id", "person_type", "nominal_time", "cutoff_time", "arrived_at", "status", "minutes_after_cutoff"], description: "Pointage quotidien et suivi des présences.", section: "ADMINISTRATION" },
+  { key: "myCourses", label: "Mes cours", icon: "▤", table: "course_sessions", columns: ["session_date", "planned_start", "planned_end", "formation_id", "group_id", "status"], description: "Consultez les cours et séances prévus pour votre formation ou votre groupe.", section: "ESPACE APPRENANT" },
   { key: "myAttendance", label: "Mes présences", icon: "◷", table: "daily_attendance", columns: ["local_date", "person_type", "nominal_time", "cutoff_time", "arrived_at", "status", "minutes_after_cutoff"], description: "Consultez votre historique personnel de pointage quotidien.", section: "ESPACE APPRENANT" },
+  { key: "myAbsences", label: "Justifier une absence", icon: "✎", table: "absence_justifications", columns: ["attendance_id", "reason_type", "reason", "submitted_at", "status", "review_comment"], description: "Envoyez une justification et suivez la réponse du secrétariat ou de la Direction.", section: "ESPACE APPRENANT" },
   { key: "penalties", label: "Pénalités", icon: "⚠", table: "penalties", columns: ["id", "person_id", "penalty_type", "description", "amount_fcfa", "status", "created_at"], description: "Créer et suivre les pénalités, avec leur motif et leur montant.", section: "ADMINISTRATION" },
   { key: "payments", label: "Paiements", icon: "₣", table: "payments", columns: ["id", "payment_type", "payment_category", "penalty_id", "person_id", "payer_name", "payer_phone", "payer_identifier", "payment_description", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Paiements ordinaires et règlement des pénalités.", section: "FINANCES" },
   { key: "staff", label: "Personnel", icon: "♙", table: "staff", columns: ["id", "staff_number", "department", "position", "hire_date", "status"], description: "Personnel administratif et opérationnel.", section: "ADMINISTRATION" },
@@ -60,8 +62,8 @@ const roleModules: Record<string, ModuleKey[]> = {
   ACCOUNTING: ["dashboard","penalties","payments","settings"],
   FINANCE: ["dashboard","penalties","payments","settings"],
   TRAVEL_AGENT: ["dashboard","formations","settings"],
-  STUDENT: ["dashboard","myAttendance","settings"],
-  APPRENANT: ["dashboard","myAttendance","settings"]
+  STUDENT: ["dashboard","myCourses","myAttendance","myAbsences","settings"],
+  APPRENANT: ["dashboard","myCourses","myAttendance","myAbsences","settings"]
 };
 const canAccessModule = (key: ModuleKey, roleCodes: string[]) => {
   const normalized = roleCodes.map(code => code.toUpperCase());
@@ -106,6 +108,7 @@ export default function Home() {
   const [ruleSchemaReady, setRuleSchemaReady] = useState(true);
   const [ruleForm, setRuleForm] = useState({ penalty_type: "late_arrival", description: "", target_scope: "all", application_mode: "automatic", applies_after_time: "08:20", min_delay_minutes: "0", tolerance_minutes: "0", amount_fcfa: "2000" });
   const [applyRuleForm, setApplyRuleForm] = useState({ rule_id: "", person_id: "" });
+  const [absenceForm, setAbsenceForm] = useState({ attendance_id: "", reason_type: "illness", reason: "" });
 
   const loadIdentity = useCallback(async (current: User) => {
     const [{ data: p }, { data: r }] = await Promise.all([
