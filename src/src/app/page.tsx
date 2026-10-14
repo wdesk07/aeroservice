@@ -17,7 +17,7 @@ type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups"
 type ModuleConfig = { key: ModuleKey; label: string; icon: string; table?: string; columns?: string[]; description: string; section: string };
 const modules: ModuleConfig[] = [
   { key: "dashboard", label: "Vue d’ensemble", icon: "⌂", description: "Les indicateurs essentiels de votre établissement.", section: "PILOTAGE" },
-  { key: "students", label: "Apprenants", icon: "♙", table: "students", columns: ["student_number", "formation_id", "group_id", "enrollment_date", "education_level"], description: "Suivi des apprenants et de leurs parcours.", section: "PÉDAGOGIE" },
+  { key: "students", label: "Apprenants", icon: "♙", table: "students", columns: ["id", "student_number", "formation_id", "group_id", "enrollment_date", "education_level"], description: "Suivi des apprenants et de leurs parcours.", section: "PÉDAGOGIE" },
   { key: "teachers", label: "Formateurs", icon: "♧", table: "teachers", columns: ["id", "teacher_number", "specialization", "hire_date", "status"], description: "Équipe pédagogique et affectations.", section: "PÉDAGOGIE" },
   { key: "formations", label: "Formations", icon: "✈", table: "formations", columns: ["code", "name", "duration", "status", "created_at"], description: "Catalogue des formations proposées.", section: "PÉDAGOGIE" },
   { key: "groups", label: "Groupes", icon: "▦", table: "groups", columns: ["code", "name", "academic_year", "capacity", "status"], description: "Organisation des groupes et promotions.", section: "PÉDAGOGIE" },
@@ -208,6 +208,23 @@ export default function Home() {
     }
     if (active !== "dashboard" && active !== "settings") void loadRows(active);
   }, [user, active, roles, loadRows]);
+
+  // Open the requested module from a contextual action (e.g. a late-arrival alert).
+  // The destination still passes through the same role checks and Supabase RLS policies.
+  useEffect(() => {
+    if (!user || roles.length === 0 || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedKey = params.get("module");
+    if (!requestedKey) return;
+    const target = modules.find(item => item.key === requestedKey);
+    if (!target || !canAccessModule(target.key, roles.map(role => role.code))) {
+      setError("Le module demandé n’est pas autorisé pour votre rôle.");
+      return;
+    }
+    setActive(target.key);
+    setSearch(params.get("person_id") ?? "");
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [user, roles]);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
