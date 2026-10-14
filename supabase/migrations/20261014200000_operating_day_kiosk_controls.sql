@@ -79,6 +79,31 @@ grant execute on function public.open_operating_day_and_activate_kiosk(text) to 
 revoke all on function public.close_operating_day_and_revoke_kiosk(uuid) from public, anon;
 grant execute on function public.close_operating_day_and_revoke_kiosk(uuid) to authenticated;
 
+create or replace function public.is_presence_kiosk_active(p_device_token text)
+returns boolean
+language sql
+security definer
+set search_path = ''
+as $function$
+  select coalesce(
+    p_device_token is not null
+    and length(p_device_token) >= 40
+    and exists (
+      select 1 from public.presence_kiosk_devices d
+      where d.token_hash=encode(extensions.digest(convert_to(p_device_token,'UTF8'),'sha256'),'hex')
+        and d.revoked_at is null
+    )
+    and exists (
+      select 1 from public.operating_days od
+      where od.business_date=(clock_timestamp() at time zone 'Africa/Porto-Novo')::date
+        and od.status='open'
+    ), false
+  );
+$function$;
+
+revoke all on function public.is_presence_kiosk_active(text) from public;
+grant execute on function public.is_presence_kiosk_active(text) to anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.kiosk_daily_checkin(p_device_token text, p_lat numeric DEFAULT NULL::numeric, p_lng numeric DEFAULT NULL::numeric, p_accuracy_m numeric DEFAULT NULL::numeric)
  RETURNS jsonb
  LANGUAGE plpgsql
