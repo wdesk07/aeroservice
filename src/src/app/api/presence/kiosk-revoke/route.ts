@@ -19,10 +19,10 @@ export async function POST(request: Request) {
   const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
   if (authError || !authData.user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
 
-  const { error } = await supabase.rpc("revoke_presence_kiosk", { p_device_id: deviceId });
+  const { error } = await supabase.rpc("close_operating_day_and_revoke_kiosk", { p_device_id: deviceId });
   if (error) return NextResponse.json({ error: error.message }, { status: 403 });
 
-  const response = NextResponse.json({ ok: true, activated: false });
+  const response = NextResponse.json({ ok: true, activated: false, closed: true });
   response.cookies.set("aero_presence_kiosk_token", "", { httpOnly: true, secure: true, sameSite: "strict", path: "/api/presence", maxAge: 0 });
   response.cookies.set("aero_presence_kiosk_device_id", "", { httpOnly: true, secure: true, sameSite: "strict", path: "/api/presence", maxAge: 0 });
   response.headers.set("Cache-Control", "no-store");
