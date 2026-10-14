@@ -29,11 +29,19 @@ export default function PointagePage() {
     setBusy(true);
     setError("");
     setMessage("");
-    let signedIn = false;
+    const enteredEmail = email.trim();
     const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData.session) signedIn = true;
-    if (!signedIn) {
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const currentEmail = sessionData.session?.user?.email?.trim().toLowerCase();
+    const requestedEmail = enteredEmail.toLowerCase();
+
+    // Never reuse a different signed-in user's session for this check-in.
+    if (sessionData.session && currentEmail !== requestedEmail) {
+      await supabase.auth.signOut();
+    }
+
+    const { data: freshSessionData } = await supabase.auth.getSession();
+    if (!freshSessionData.session) {
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email: enteredEmail, password });
       if (loginError) {
         setError("Connexion impossible : vérifiez vos identifiants. " + loginError.message);
         setBusy(false);
