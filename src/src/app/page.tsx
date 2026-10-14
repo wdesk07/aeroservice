@@ -25,7 +25,7 @@ const modules: ModuleConfig[] = [
   { key: "rooms", label: "Salles", icon: "⌂", table: "rooms", columns: ["code", "name", "capacity", "location_description", "status"], description: "Salles et espaces de formation.", section: "ORGANISATION" },
   { key: "registrations", label: "Inscriptions", icon: "▣", table: "registrations", columns: ["id", "registration_number", "person_id", "formation_id", "group_id", "registration_date", "status", "submitted_at", "review_comment"], description: "Demandes d’inscription et admissions.", section: "ADMINISTRATION" },
   { key: "attendance", label: "Présences", icon: "◷", table: "daily_attendance", columns: ["local_date", "person_id", "person_type", "nominal_time", "cutoff_time", "arrived_at", "status", "minutes_after_cutoff"], description: "Pointage quotidien et suivi des présences.", section: "ADMINISTRATION" },
-  { key: "myCourses", label: "Mes cours", icon: "▤", table: "course_sessions", columns: ["session_date", "planned_start", "planned_end", "formation_id", "group_id", "status"], description: "Consultez les cours et séances prévus pour votre formation ou votre groupe.", section: "ESPACE APPRENANT" },
+  { key: "myCourses", label: "Mes cours", icon: "▤", table: "course_sessions", columns: ["id", "session_date", "planned_start", "planned_end", "formation_id", "group_id", "status"], description: "Consultez les cours et séances prévus pour votre formation ou votre groupe.", section: "ESPACE APPRENANT" },
   { key: "myAttendance", label: "Mes présences", icon: "◷", table: "daily_attendance", columns: ["local_date", "person_type", "nominal_time", "cutoff_time", "arrived_at", "status", "minutes_after_cutoff"], description: "Consultez votre historique personnel de pointage quotidien.", section: "ESPACE APPRENANT" },
   { key: "myAbsences", label: "Justifier une absence", icon: "✎", table: "absence_justifications", columns: ["attendance_id", "reason_type", "reason", "submitted_at", "status", "review_comment"], description: "Envoyez une justification et suivez la réponse du secrétariat ou de la Direction.", section: "ESPACE APPRENANT" },
   { key: "penalties", label: "Pénalités", icon: "⚠", table: "penalties", columns: ["id", "person_id", "penalty_type", "description", "amount_fcfa", "status", "created_at"], description: "Créer et suivre les pénalités, avec leur motif et leur montant.", section: "ADMINISTRATION" },
@@ -145,7 +145,7 @@ export default function Home() {
         setRows([]); setError(studentError ? "Impossible de charger votre inscription : " + studentError.message : "Aucune formation ou aucun groupe n’est encore associé à votre compte. Contactez le secrétariat."); setLoading(false); return;
       }
       const conditions = [studentRecord.group_id ? "group_id.eq." + studentRecord.group_id : "", studentRecord.formation_id ? "and(group_id.is.null,formation_id.eq." + studentRecord.formation_id + ")" : ""].filter(Boolean);
-      query = query.select("id,session_date,planned_start,planned_end,formation_id,group_id,status").or(conditions.join(",")).neq("status","cancelled").order("session_date",{ascending:true});
+      query = query.or(conditions.join(",")).neq("status","cancelled").order("session_date",{ascending:true});
     }
     // Contextual links from a late alert pass the learner's profile UUID.
     // Apply that filter at the database query as well as the visible search.
