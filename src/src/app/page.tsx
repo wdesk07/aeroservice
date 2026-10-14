@@ -98,7 +98,7 @@ export default function Home() {
   const [teacherIds, setTeacherIds] = useState<string[]>([]);
   const [penaltyRules, setPenaltyRules] = useState<Record<string, any>[]>([]);
   const [ruleSchemaReady, setRuleSchemaReady] = useState(true);
-  const [ruleForm, setRuleForm] = useState({ penalty_type: "late_arrival", description: "", target_scope: "all", application_mode: "automatic", applies_after_time: "08:20", min_delay_minutes: "0", tolerance_minutes: "0", amount_fcfa: "2000" });
+  const [ruleForm, setRuleForm] = useState({ formation_id: "", penalty_type: "late_arrival", description: "", target_scope: "students", application_mode: "automatic", applies_after_time: "08:20", min_delay_minutes: "0", tolerance_minutes: "0", amount_fcfa: "2000" });
   const [applyRuleForm, setApplyRuleForm] = useState({ rule_id: "", person_id: "" });
 
   const loadIdentity = useCallback(async (current: User) => {
