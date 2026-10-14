@@ -71,9 +71,14 @@ export default function PointagePage() {
     });
     if (checkinError) {
       setError("Pointage non confirmé. " + checkinError.message);
-    } else {
+    } else if (data?.duplicate === true) {
+      setMessage("Pointage déjà enregistré pour aujourd’hui. Aucun nouveau pointage n’a été créé. Statut conservé : " + (data?.status ?? "inconnu") + ".");
+      setPassword("");
+    } else if (data?.ok === true) {
       setMessage("Pointage transmis au serveur. " + (data?.status ? "Statut : " + data.status + "." : "Vérifiez le statut retourné avant de quitter."));
       setPassword("");
+    } else {
+      setError("Le serveur n’a pas confirmé l’enregistrement du pointage. Réessayez ou contactez l’administration.");
     }
     setBusy(false);
   }
