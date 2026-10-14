@@ -42,6 +42,7 @@ export default function PresenceKioskPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [deviceRegistered, setDeviceRegistered] = useState(false);
+  const [operatingDayStatus, setOperatingDayStatus] = useState<"open" | "closed" | "not_opened" | "unknown">("unknown");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -51,7 +52,7 @@ export default function PresenceKioskPage() {
   useEffect(() => {
     fetch("/api/presence/kiosk-status", { cache: "no-store" })
       .then((response) => response.json())
-      .then((payload) => setDeviceRegistered(Boolean(payload.activated)))
+      .then((payload) => { setDeviceRegistered(Boolean(payload.activated)); setOperatingDayStatus(["open","closed","not_opened"].includes(payload.dayStatus) ? payload.dayStatus : "unknown"); })
       .catch(() => setDeviceRegistered(false));
 
     let alive = true;
@@ -97,6 +98,7 @@ export default function PresenceKioskPage() {
       const payload = await response.json();
       if (!response.ok || !payload?.activated) throw new Error(payload?.error || "KIOSK_ACTIVATION_FAILED");
       setDeviceRegistered(true);
+      setOperatingDayStatus("open");
       setMessage("Journée ouverte et borne activée. Le jeton est conservé dans un cookie sécurisé inaccessible au JavaScript.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Activation impossible."));
@@ -119,6 +121,7 @@ export default function PresenceKioskPage() {
       const payload = await response.json();
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "KIOSK_REVOKE_FAILED");
       setDeviceRegistered(false);
+      setOperatingDayStatus("closed");
       setMessage("Journée fermée. Les jetons actifs de borne sont révoqués et aucun nouveau pointage ne sera accepté.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Révocation impossible."));
@@ -264,8 +267,10 @@ export default function PresenceKioskPage() {
                 <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Terminer la configuration et ouvrir le pointage apprenant</button>
                 <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Fermer la journée et révoquer la borne</button>
               </>
+            ) : operatingDayStatus === "closed" ? (
+              <p role="status" style={{ color: "#8f2020", lineHeight: 1.5 }}>La journée est déjà fermée. Les jetons de borne sont révoqués; une nouvelle ouverture sera possible le prochain jour ouvrable.</p>
             ) : (
-              <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Activation…" : "Activer cet ordinateur comme borne"}</button>
+              <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Ouverture en cours…" : "Ouvrir la journée et activer cette borne"}</button>
             )}
           </div>
         )}
