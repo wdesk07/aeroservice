@@ -79,6 +79,22 @@ grant execute on function public.open_operating_day_and_activate_kiosk(text) to 
 revoke all on function public.close_operating_day_and_revoke_kiosk(uuid) from public, anon;
 grant execute on function public.close_operating_day_and_revoke_kiosk(uuid) to authenticated;
 
+create or replace function public.get_public_operating_day_status()
+returns text
+language sql
+security definer
+set search_path = ''
+as $function$
+  select coalesce((
+    select od.status from public.operating_days od
+    where od.business_date=(clock_timestamp() at time zone 'Africa/Porto-Novo')::date
+    limit 1
+  ), 'not_opened');
+$function$;
+
+revoke all on function public.get_public_operating_day_status() from public;
+grant execute on function public.get_public_operating_day_status() to anon, authenticated;
+
 create or replace function public.is_presence_kiosk_active(p_device_token text)
 returns boolean
 language sql
