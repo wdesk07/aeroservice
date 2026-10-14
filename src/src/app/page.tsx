@@ -531,9 +531,11 @@ export default function Home() {
     const { plannedAt, arrivedAt, delayMinutes, amount } = validation;
     const personLabel = lateForm.person_type === "staff" ? "Personnel" : "Apprenant";
     const note = `${personLabel} — retard ${delayMinutes} min. Montant payé : ${amount.toLocaleString("fr-FR")} FCFA. Accès autorisé par le secrétariat après validation du règlement.${lateForm.reason.trim() ? " Motif : " + lateForm.reason.trim() : ""}`;
-    const localDate = new Intl.DateTimeFormat("en-CA", {
+    const dateParts = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Africa/Porto-Novo", year: "numeric", month: "2-digit", day: "2-digit"
-    }).format(arrivedAt);
+    }).formatToParts(arrivedAt);
+    const datePart = (type: string) => dateParts.find(part => part.type === type)?.value ?? "";
+    const localDate = `${datePart("year")}-${datePart("month")}-${datePart("day")}`;
     const { data: existingDaily, error: existingDailyError } = await supabase
       .from("daily_attendance").select("id,status,person_type,nominal_time,cutoff_time")
       .eq("person_id", lateForm.person_id).eq("local_date", localDate).maybeSingle();
@@ -615,18 +617,11 @@ export default function Home() {
       setError("Le paiement a été créé, mais sa validation n’a pas été confirmée par la base. La pénalité reste à régler et l’accès reste bloqué. Détail : " + (validationResult.error?.message || "Aucune ligne validée n’a été retournée."));
       await loadRows("attendance"); await loadRows("penalties"); await loadRows("payments"); setBusy(false); return;
     }
-    const accessResult = await supabase.from("daily_attendance").update({
-      status: "regularized"
-    }).eq("id", attendanceResult.data.id).eq("status", "late");
-    if (accessResult.error) {
-      setError("Le paiement est validé, mais la mise à jour de l’autorisation d’accès a échoué. Prévenez l’administration. Détail : " + accessResult.error.message);
+    const accessResult = await supabase.from("daily_attendance")
+      .select("id,status").eq("id", attendanceResult.data.id).maybeSingle();
+    if (accessResult.error || accessResult.data?.status !== "regularized") {
+      setError("Le paiement est validé, mais la régularisation du pointage n’est pas confirmée. L’accès reste à vérifier par la direction. Détail : " + (accessResult.error?.message || "Le statut du pointage n’est pas regularized."));
     } else {
-      await supabase.from("attendance_events").insert({
-        attendance_id: null, person_id: lateForm.person_id,
-        event_type: "regularized", occurred_at: new Date().toISOString(),
-        source: "secretariat", created_by: user.id,
-        metadata: { daily_attendance_id: attendanceResult.data.id, person_type: lateForm.person_type, delay_minutes: delayMinutes, amount_fcfa: amount, payment_method: lateForm.method, payment_status: "validated", authorized_by: user.id, access_authorized: true, reason: lateForm.reason.trim() || null }
-      });
       setNotice(`Retard enregistré : ${delayMinutes} minute(s). Paiement de ${paymentAmount.toLocaleString("fr-FR")} FCFA validé. Accès autorisé — dossier affiché en jaune.`);
       setLateForm({ person_type: "student", person_id: "", planned_time: "09:00", arrived_time: "", amount_fcfa: "", method: "cash", provider: "", transaction_reference: "", reason: "" });
     }
