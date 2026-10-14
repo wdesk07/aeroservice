@@ -22,12 +22,17 @@ export async function GET(request: Request) {
   const supabase = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data, error } = await supabase.rpc("is_presence_kiosk_active", {
-    p_device_token: token,
-  });
+  const [{ data, error }, { data: dayStatusData, error: dayStatusError }] = await Promise.all([
+    supabase.rpc("is_presence_kiosk_active", { p_device_token: token }),
+    supabase.rpc("get_public_operating_day_status"),
+  ]);
+  const allowedStatuses = ["open", "closed", "not_opened"];
+  const dayStatus = !dayStatusError && typeof dayStatusData === "string" && allowedStatuses.includes(dayStatusData)
+    ? dayStatusData
+    : "unknown";
 
   return NextResponse.json(
-    { activated: !error && data === true },
+    { activated: !error && data === true, dayStatus },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
