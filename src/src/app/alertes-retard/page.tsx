@@ -117,18 +117,24 @@ export default function LateAttendanceAlertsPage() {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse" }}>
                 <thead><tr style={{ background: "#f8fafc", textAlign: "left" }}>
-                  {["État", "Alerte", "Reçue le", "Référence"].map(label => <th key={label} style={{ padding: 12, fontSize: 12, color: "#52637a" }}>{label}</th>)}
+                  {["État", "Alerte", "Reçue le", "Référence", "Actions"].map(label => <th key={label} style={{ padding: 12, fontSize: 12, color: "#52637a" }}>{label}</th>)}
                 </tr></thead>
                 <tbody>{alerts.map(alert => <tr key={alert.id} style={{ borderTop: "1px solid #e6ebf2" }}>
                   <td style={{ padding: 12 }}><span style={{ display: "inline-block", borderRadius: 999, padding: "4px 8px", fontSize: 12, fontWeight: 700, background: alert.status === "read" ? "#fef3c7" : "#fee2e2", color: alert.status === "read" ? "#92400e" : "#991b1b" }}>{alert.status === "pending" ? "À traiter" : alert.status}</span></td>
                   <td style={{ padding: 12 }}><strong>{alert.title ?? "Alerte de retard"}</strong><div style={{ marginTop: 5, lineHeight: 1.5 }}>{alert.body ?? ""}</div></td>
                   <td style={{ padding: 12, whiteSpace: "nowrap" }}>{new Date(alert.created_at).toLocaleString("fr-FR", { timeZone: "Africa/Porto-Novo" })}</td>
                   <td style={{ padding: 12, fontFamily: "monospace" }}>{typeof alert.data?.daily_attendance_id === "string" ? alert.data.daily_attendance_id.slice(0, 8) : "—"}</td>
+                  <td style={{ padding: 12, minWidth: 190 }}>
+                    {typeof alert.data?.person_id === "string" && alert.data.person_id ? <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+                      <a href={`/?module=students&person_id=${encodeURIComponent(alert.data.person_id)}`} style={{ color: "#173b68", fontWeight: 700, textDecoration: "underline" }}>Ouvrir le dossier</a>
+                      <a href={`/?module=payments&person_id=${encodeURIComponent(alert.data.person_id)}`} style={{ color: "#173b68", textDecoration: "underline" }}>Voir les paiements</a>
+                    </div> : <span style={{ color: "#65748b" }}>Dossier non lié</span>}
+                  </td>
                 </tr>)}</tbody>
               </table>
             </div>}
         </section>
-        <p style={{ marginTop: 16, color: "#65748b", fontSize: 12, lineHeight: 1.6 }}>Cette page sert à consulter les alertes. Elle ne valide aucun paiement et ne débloque pas les accès aux cours.</p>
+        <p style={{ marginTop: 16, color: "#65748b", fontSize: 12, lineHeight: 1.6 }}>« Ouvrir le dossier » affiche la fiche de l’apprenant dans le module Apprenants. « Voir les paiements » ouvre ses règlements existants pour consultation et validation par un rôle autorisé. Cette page ne valide pas elle-même de paiement et ne débloque pas directement l’accès aux cours.</p>
       </section>
     </main>
   );
