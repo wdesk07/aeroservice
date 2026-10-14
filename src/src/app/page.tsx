@@ -133,13 +133,21 @@ export default function Home() {
     if (!config?.table) { setRows([]); return; }
     setLoading(true); setError("");
     const cols = config.columns?.join(",") || "*";
-    const result = await supabase.from(config.table).select(cols).limit(100);
+    let query = supabase.from(config.table).select(cols).limit(100);
+    // Contextual links from a late alert pass the learner's profile UUID.
+    // Apply that filter at the database query as well as the visible search.
+    const contextId = search.trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contextId);
+    if (isUuid && key === "payments") query = query.eq("person_id", contextId);
+    if (isUuid && key === "students") query = query.eq("id", contextId);
+    const result = await query;
     if (result.error) {
+      console.error("Aéro Service module query failed", { module: key, code: result.error.code, message: result.error.message });
       setRows([]);
-      setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
+      setError("Impossible de charger ce module. Détail technique : " + (result.error.code || "erreur") + " — " + result.error.message);
     } else setRows((result.data ?? []) as unknown as Record<string, unknown>[]);
     setLoading(false);
-  }, [roles]);
+  }, [roles, search]);
 
   useEffect(() => {
     if (!user || !roles.some(role => ["ACCOUNTING", "FINANCE"].includes(role.code.toUpperCase()))) {
