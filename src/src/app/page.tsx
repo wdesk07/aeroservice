@@ -291,7 +291,7 @@ export default function Home() {
   const [profileOptions, setProfileOptions] = useState<{ id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]>([]);
   const [penaltyOptions, setPenaltyOptions] = useState<{ id: string; person_id: string; amount_fcfa: number; status: string; penalty_type?: string | null; description?: string | null }[]>([]);
   useEffect(() => {
-    if (user && ["students", "groups", "subjects", "registrations"].includes(active)) {
+    if (user && ["students", "groups", "subjects", "registrations", "penalties"].includes(active)) {
       supabase.from("formations").select("id,name,code").order("name").then(({ data }) => setFormationOptions((data ?? []) as { id: string; name: string; code: string }[]));
     }
     if (user && ["students", "registrations", "attendance", "penalties", "payments"].includes(active)) {
@@ -306,7 +306,7 @@ export default function Home() {
         });
       } else setPenaltyOptions([]);
       if (active === "penalties") {
-        supabase.from("penalty_rules").select("id,person_type,min_delay_minutes,max_delay_minutes,amount_fcfa,tolerance_minutes,blocks_access,priority,active,effective_from,effective_until,created_by,created_at,penalty_type,description,target_scope,application_mode,applies_after_time").order("priority", { ascending: true }).then(({ data, error }) => {
+        supabase.from("penalty_rules").select("id,formation_id,person_type,min_delay_minutes,max_delay_minutes,amount_fcfa,tolerance_minutes,blocks_access,priority,active,effective_from,effective_until,created_by,created_at,penalty_type,description,target_scope,application_mode,applies_after_time").order("priority", { ascending: true }).then(({ data, error }) => {
           setRuleSchemaReady(!error);
           setPenaltyRules(error ? [] : (data ?? []) as Record<string, any>[]);
         });
@@ -324,7 +324,7 @@ export default function Home() {
     setBusy(true); setError(""); setNotice("");
     const legacyPersonType = ruleForm.target_scope === "all" ? "student" : ruleForm.target_scope === "students" ? "student" : ruleForm.target_scope;
     const { data, error: saveError } = await supabase.from("penalty_rules").insert({
-      person_type: legacyPersonType, penalty_type: ruleForm.penalty_type, description: ruleForm.description.trim() || null,
+      person_type: legacyPersonType, formation_id: ruleForm.formation_id || null, penalty_type: ruleForm.penalty_type, description: ruleForm.description.trim() || null,
       target_scope: ruleForm.target_scope, application_mode: ruleForm.application_mode, applies_after_time: ruleForm.applies_after_time || null,
       min_delay_minutes: minDelay, max_delay_minutes: null, tolerance_minutes: tolerance, amount_fcfa: amount,
       blocks_access: false, priority: 100, active: true, effective_from: new Date().toISOString(), created_by: user.id
