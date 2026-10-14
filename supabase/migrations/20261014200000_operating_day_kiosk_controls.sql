@@ -251,8 +251,7 @@ begin
    'checkpoint',d.name,'session_id',cs.id,'formation_id',cs.formation_id,'group_id',cs.group_id,
    'penalty_rule_id',case when has_rule then pr.id else null end);
 end;
-$function$
-
+$function$;
 
 -- Approved justifications regularize the exact linked absence, not merely the request date.
 CREATE OR REPLACE FUNCTION public.review_absence_justification(p_justification_id uuid, p_decision text, p_comment text DEFAULT NULL::text)
@@ -346,8 +345,7 @@ begin
     'reviewed_at',v_row.reviewed_at,'daily_attendance_regularized',v_attendance_id is not null
   );
 end;
-$function$
-
+$function$;
 
 -- pg_cron is GMT on TEST; Benin is GMT+1.
 do $schedule$
