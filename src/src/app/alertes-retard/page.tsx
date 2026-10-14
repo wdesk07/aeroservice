@@ -22,6 +22,7 @@ const allowedRoles = ["SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "
 
 export default function LateAttendanceAlertsPage() {
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
+  const [resolvedAttendanceIds, setResolvedAttendanceIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("Vérification de la session…");
@@ -79,7 +80,21 @@ export default function LateAttendanceAlertsPage() {
       setAlerts([]);
       setError("Les notifications n’ont pas pu être chargées. Vérifiez les droits de lecture de la table notifications.");
     } else {
-      setAlerts((data ?? []) as AlertRow[]);
+      const loadedAlerts = (data ?? []) as AlertRow[];
+      setAlerts(loadedAlerts);
+      const attendanceIds = [...new Set(loadedAlerts.map(alert => typeof alert.data?.daily_attendance_id === "string" ? alert.data.daily_attendance_id : "").filter(Boolean))];
+      if (attendanceIds.length) {
+        const { data: linkedPenalties } = await supabase.from("penalties").select("id,daily_attendance_id,status").in("daily_attendance_id", attendanceIds);
+        const penaltyRows = (linkedPenalties ?? []) as {id:string;daily_attendance_id:string|null;status:string}[];
+        const resolved = penaltyRows.filter(row => ["paid","waived","validated","regularized"].includes(String(row.status).toLowerCase()));
+        const unresolvedPenaltyIds = penaltyRows.filter(row => !resolved.includes(row)).map(row => row.id);
+        let paidPenaltyIds: string[] = [];
+        if (unresolvedPenaltyIds.length) {
+          const { data: paidPayments } = await supabase.from("payments").select("penalty_id").in("penalty_id", unresolvedPenaltyIds).in("status", ["validated","paid","success"]);
+          paidPenaltyIds = [...new Set((paidPayments ?? []).map((row: any) => String(row.penalty_id ?? "")).filter(Boolean))];
+        }
+        setResolvedAttendanceIds([...new Set([...resolved.map(row => String(row.daily_attendance_id ?? "")), ...penaltyRows.filter(row => paidPenaltyIds.includes(row.id)).map(row => String(row.daily_attendance_id ?? ""))].filter(Boolean))]);
+      } else setResolvedAttendanceIds([]);
       setMessage("");
     }
     setLoading(false);
@@ -120,7 +135,7 @@ export default function LateAttendanceAlertsPage() {
                   {["État", "Alerte", "Reçue le", "Référence", "Actions"].map(label => <th key={label} style={{ padding: 12, fontSize: 12, color: "#52637a" }}>{label}</th>)}
                 </tr></thead>
                 <tbody>{alerts.map(alert => <tr key={alert.id} style={{ borderTop: "1px solid #e6ebf2" }}>
-                  <td style={{ padding: 12 }}><span style={{ display: "inline-block", borderRadius: 999, padding: "4px 8px", fontSize: 12, fontWeight: 700, background: alert.status === "read" ? "#fef3c7" : "#fee2e2", color: alert.status === "read" ? "#92400e" : "#991b1b" }}>{alert.status === "pending" ? "À traiter" : alert.status}</span></td>
+                  <td style={{ padding: 12 }}><span style={{ display: "inline-block", borderRadius: 999, padding: "4px 8px", fontSize: 12, fontWeight: 700, background: resolvedAttendanceIds.includes(String(alert.data?.daily_attendance_id ?? "")) ? "#dcfce7" : alert.status === "read" ? "#fef3c7" : "#fee2e2", color: resolvedAttendanceIds.includes(String(alert.data?.daily_attendance_id ?? "")) ? "#166534" : alert.status === "read" ? "#92400e" : "#991b1b" }}>{resolvedAttendanceIds.includes(String(alert.data?.daily_attendance_id ?? "")) ? "Traité — paiement validé" : alert.status === "pending" ? "À traiter" : alert.status === "read" ? "Consultée" : alert.status}</span></td>
                   <td style={{ padding: 12 }}><strong>{alert.title ?? "Alerte de retard"}</strong><div style={{ marginTop: 5, lineHeight: 1.5 }}>{alert.body ?? ""}</div></td>
                   <td style={{ padding: 12, whiteSpace: "nowrap" }}>{new Date(alert.created_at).toLocaleString("fr-FR", { timeZone: "Africa/Porto-Novo" })}</td>
                   <td style={{ padding: 12, fontFamily: "monospace" }}>{typeof alert.data?.daily_attendance_id === "string" ? alert.data.daily_attendance_id.slice(0, 8) : "—"}</td>
