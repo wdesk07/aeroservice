@@ -11,7 +11,8 @@ const supabase = createClient(
 export default function QrPosterPage() {
   const [targetUrl, setTargetUrl] = useState("");
   const [authorized, setAuthorized] = useState(false);
-  const [checkingAccess, setCheckingAccess] = useState(true);\n  const [qrReady, setQrReady] = useState(false);\n  const [qrFailed, setQrFailed] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [qrReady, setQrReady] = useState(false);\n  const [qrFailed, setQrFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -38,8 +39,13 @@ export default function QrPosterPage() {
   }, []);
 
   const qrImage = targetUrl
-    ? "https://api.qrserver.com/v1/create-qr-code/?size=360x360&format=png&margin=12&data=" + encodeURIComponent(targetUrl)
+    ? "https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&margin=16&data=" + encodeURIComponent(targetUrl)
     : "";
+
+  function printOnlyWhenQrReady() {
+    if (!qrReady) { window.alert("Le QR code n’est pas encore chargé. Vérifiez Internet et attendez son affichage avant d’imprimer."); return; }
+    window.print();
+  }
 
   if (checkingAccess || !authorized) {
     return (
