@@ -77,9 +77,9 @@ as $function$
 begin
   if new.status = 'approved' and old.status = 'pending_confirmation'
      and new.daily_attendance_id is not null then
-    update public.daily_attendance
+    update public.attendance
       set latitude=new.latitude,longitude=new.longitude,location_accuracy_m=new.location_accuracy_m
-    where id=new.daily_attendance_id;
+    where id=new.attendance_id;
   end if;
   return new;
 end;
