@@ -56,6 +56,7 @@ begin
                 when v_local::time < c.planned_start then 1 else 2 end, c.planned_start asc
   limit 1;
   if not found then raise exception 'NO_TRAINING_SESSION_SCHEDULED_TODAY'; end if;
+  if v_local::time > v_session.planned_end then raise exception 'CHECKIN_WINDOW_CLOSED'; end if;
   perform pg_advisory_xact_lock(hashtextextended(v_uid::text || ':' || v_session.id::text,0));
 
   select * into v_existing from public.daily_attendance d
