@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Aéro Service | Gestion",
   description: "Plateforme de gestion des formations, des apprenants et des opérations Aéro Service.",
+  icons: { icon: "/aero-service-logo.svg", apple: "/aero-service-logo.svg" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
