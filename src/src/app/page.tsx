@@ -138,7 +138,24 @@ export default function Home() {
     if (!config?.table) { setRows([]); return; }
     setLoading(true); setError("");
     const cols = config.columns?.join(",") || "*";
-    const result = await supabase.from(config.table).select(cols).limit(100);
+    let result = await supabase.from(config.table).select(cols).limit(100);
+    // TEST currently stores QR-created attendance in daily_attendance; production uses attendance.
+    // Fall back only for the attendance module and normalize TEST field names for the existing table.
+    if (result.error && key === "attendance") {
+      const fallback = await supabase.from("daily_attendance").select("*").limit(100);
+      if (!fallback.error) {
+        const mapped = (fallback.data ?? []).map((row: Record<string, unknown>) => ({
+          ...row,
+          planned_at: row.nominal_time ?? null,
+          delay_minutes: row.minutes_after_cutoff ?? 0,
+          access_blocked: row.status === "late" || row.status === "absent",
+          anomaly_reason: row.status === "late" ? "Retard à régulariser" : row.status === "absent" ? "Absence à régulariser" : null
+        }));
+        setRows(mapped);
+        setLoading(false);
+        return;
+      }
+    }
     if (result.error) {
       setRows([]);
       setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
@@ -616,51 +633,30 @@ export default function Home() {
       setError("Vous n’avez pas l’autorisation de traiter cette inscription. Reconnectez-vous avec le compte du secrétariat.");
       return;
     }
-    setBusy(true); setError(""); setNotice("");
     const registrationId = String(registration.id ?? "");
-    const personId = String(registration.person_id ?? "");
-    if (!registrationId || !personId) {
-      setError("Dossier incomplet : identifiant de demande ou de compte apprenant manquant.");
-      setBusy(false);
+    if (!registrationId) {
+      setError("Dossier incomplet : identifiant de demande manquant.");
       return;
     }
-    const reviewComment = decision === "approved" ? "Dossier vérifié et approuvé par le secrétariat." : "Demande rejetée par le secrétariat. Veuillez contacter le secrétariat pour plus d’informations.";
-    const { data: updatedRegistration, error: updateError } = await supabase.from("registrations")
-      .update({ status: decision, reviewed_at: new Date().toISOString(), reviewed_by: user.id, review_comment: reviewComment })
-      .eq("id", registrationId).select("id,status").maybeSingle();
-    if (updateError || !updatedRegistration) {
-      setError("La demande n’a pas été confirmée par la base de données. " + (updateError?.message || "Aucune ligne mise à jour : vérifiez les droits du secrétariat et le statut actuel."));
-      setBusy(false);
-      return;
-    }
-    if (decision === "approved") {
-      const { data: updatedProfile, error: profileError } = await supabase.from("profiles")
-        .update({ status: "active" }).eq("id", personId).select("id,status").maybeSingle();
-      if (profileError || !updatedProfile) {
-        setError("L’inscription est approuvée, mais le compte n’a pas été activé. " + (profileError?.message || "Le profil apprenant n’a pas été mis à jour. Vérifiez les droits du secrétariat dans Supabase."));
-        await loadRows("registrations"); setBusy(false); return;
-      }
-      let secondaryIssue = "";
-      const { data: existingStudent, error: lookupStudentError } = await supabase.from("students").select("id").eq("id", personId).maybeSingle();
-      if (lookupStudentError) {
-        secondaryIssue = "Compte activé, mais impossible de vérifier le dossier apprenant : " + lookupStudentError.message;
-        setError(secondaryIssue);
-      } else if (!existingStudent) {
-        const studentNumber = "AS-" + new Date().getFullYear() + "-" + personId.replace(/-/g, "").slice(0, 8).toUpperCase();
-        const { error: studentError } = await supabase.from("students").insert({ id: personId, student_number: studentNumber, formation_id: registration.formation_id || null, group_id: registration.group_id || null, enrollment_date: new Date().toISOString().slice(0,10) });
-        if (studentError) { secondaryIssue = "Compte activé, mais le dossier apprenant n’a pas été créé automatiquement. " + studentError.message; setError(secondaryIssue); }
-      }
-      if (!updatedProfile || updatedProfile.status !== "active") {
-        setError("La demande a été enregistrée, mais le statut actif du compte n’a pas été confirmé.");
-      } else if (!secondaryIssue) {
-        setNotice("VALIDATION CONFIRMÉE : inscription approuvée et compte apprenant activé. L’apprenant peut maintenant se connecter.");
-      } else {
-        setNotice("Inscription approuvée et compte activé. Attention : " + secondaryIssue);
-      }
+    setBusy(true); setError(""); setNotice("");
+    const reviewComment = decision === "approved"
+      ? "Dossier vérifié et approuvé par le secrétariat."
+      : "Demande rejetée par le secrétariat. Veuillez contacter le secrétariat pour plus d’informations.";
+    const { data, error: reviewError } = await supabase.rpc("review_registration_and_activate_student", {
+      p_registration_id: registrationId,
+      p_decision: decision,
+      p_comment: reviewComment
+    });
+    if (reviewError || !data?.ok) {
+      setError(reviewError?.message || data?.error || "La décision n’a pas été enregistrée.");
+    } else if (decision === "approved") {
+      setNotice("VALIDATION CONFIRMÉE : inscription approuvée, compte activé, rôle apprenant confirmé et dossier de formation prêt pour le pointage QR.");
     } else {
       setNotice("Demande d’inscription rejetée et décision enregistrée.");
     }
-    await loadRows("registrations"); await loadCounts(); setBusy(false);
+    await loadRows("registrations");
+    await loadCounts();
+    setBusy(false);
   }
 
   async function submitAbsenceJustification(e: React.FormEvent<HTMLFormElement>) {
