@@ -197,3 +197,16 @@ $$;
 
 revoke all on function public.kiosk_daily_checkin(text,numeric,numeric,numeric) from public, anon;
 grant execute on function public.kiosk_daily_checkin(text,numeric,numeric,numeric) to authenticated;
+
+
+-- Failed kiosk logins are rate-limited by identifier over a rolling 15-minute window.
+create table if not exists public.kiosk_auth_attempts (
+  id bigint generated always as identity primary key,
+  identifier_hash text not null,
+  success boolean not null default false,
+  attempted_at timestamptz not null default now()
+);
+create index if not exists kiosk_auth_attempts_identifier_time_idx
+  on public.kiosk_auth_attempts(identifier_hash, attempted_at desc);
+alter table public.kiosk_auth_attempts enable row level security;
+revoke all on public.kiosk_auth_attempts from anon, authenticated;
