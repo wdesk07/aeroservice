@@ -88,17 +88,43 @@ declare
  v_uid uuid := auth.uid();
  v_now timestamptz := clock_timestamp();
  v_date date := (clock_timestamp() at time zone 'Africa/Porto-Novo')::date;
+ v_local timestamp without time zone := clock_timestamp() at time zone 'Africa/Porto-Novo';
  v_status text;
  v_revoked integer;
+ v_absences integer := 0;
 begin
  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
  if not public.kiosk_actor_has_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY']) then raise exception 'KIOSK_ADMIN_REQUIRED'; end if;
  select status into v_status from public.operating_days where business_date=v_date for update;
  if v_status is distinct from 'open' then raise exception 'OPERATING_DAY_NOT_OPEN'; end if;
+ if v_local::time >= time '19:00' then
+   with missing_sessions as (
+     select cs.id as session_id, st.id as person_id, cs.planned_start
+     from public.course_sessions cs
+     join public.students st on (cs.group_id=st.group_id or (cs.group_id is null and cs.formation_id=st.formation_id))
+     join public.profiles p on p.id=st.id and p.status='active'
+     where cs.session_date=v_date and cs.planned_end<=v_now
+       and lower(coalesce(cs.status,'')) not in ('cancelled','canceled','annule','annulée','annulee')
+       and not exists (
+         select 1 from public.attendance a
+         where a.session_id=cs.id and a.person_id=st.id and lower(a.person_type)='student'
+       )
+   ), created_absences as (
+     insert into public.attendance(session_id,person_id,person_type,status,planned_at,access_blocked,source)
+     select ms.session_id,ms.person_id,'student','absent',ms.planned_start,false,'kiosk_day_close'
+     from missing_sessions ms
+     returning id,person_id
+   )
+   insert into public.attendance_events(attendance_id,person_id,event_type,occurred_at,source,metadata,created_by)
+   select ca.id,ca.person_id,'absence_auto_closed',v_now,'kiosk_day_close',
+     jsonb_build_object('business_date',v_date),v_uid
+   from created_absences ca;
+   get diagnostics v_absences = row_count;
+ end if;
  update public.operating_days set status='closed',closed_at=v_now,closed_by=v_uid,updated_at=v_now where business_date=v_date;
  update public.presence_kiosk_devices set revoked_at=v_now where revoked_at is null;
  get diagnostics v_revoked = row_count;
- return jsonb_build_object('ok',true,'closed',true,'business_date',v_date,'status','closed','closed_at',v_now,'devices_revoked',v_revoked);
+ return jsonb_build_object('ok',true,'closed',true,'business_date',v_date,'status','closed','closed_at',v_now,'devices_revoked',v_revoked,'absences_created',v_absences);
 end;
 $$;
 
