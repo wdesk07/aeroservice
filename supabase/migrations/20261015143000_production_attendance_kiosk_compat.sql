@@ -239,6 +239,7 @@ begin
  and r.application_mode='automatic'
  and r.target_scope in ('students','all')
  and (r.formation_id=v_session.formation_id or r.formation_id is null)
+ and (r.applies_after_time is null or v_local::time > r.applies_after_time)
  and v_raw_delay > greatest(coalesce(r.tolerance_minutes,0),0)
  and v_raw_delay >= r.min_delay_minutes
  and (r.max_delay_minutes is null or v_raw_delay <= r.max_delay_minutes)
