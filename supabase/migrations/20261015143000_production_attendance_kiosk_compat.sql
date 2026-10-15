@@ -145,7 +145,7 @@ begin
  select * into v_device from public.presence_kiosk_devices
  where token_hash=encode(extensions.digest(convert_to(p_device_token,'UTF8'),'sha256'),'hex') and revoked_at is null;
  if not found then raise exception 'KIOSK_NOT_REGISTERED'; end if;
- select * into v_student from public.students s join public.profiles p on p.id=s.id
+ select s.* into v_student from public.students s join public.profiles p on p.id=s.id
  where s.id=v_uid and p.status='active';
  if not found then raise exception 'ACTIVE_STUDENT_REQUIRED'; end if;
  v_date := v_local::date;
