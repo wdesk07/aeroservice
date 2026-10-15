@@ -181,8 +181,8 @@ begin
  where c.session_date=v_date
  and lower(coalesce(c.status,'')) not in ('cancelled','canceled','annule','annulée','annulee')
  and (c.group_id=v_student.group_id or (c.group_id is null and c.formation_id=v_student.formation_id))
- order by case when v_local between c.planned_start at time zone 'Africa/Porto-Novo' and c.planned_end at time zone 'Africa/Porto-Novo' then 0
-               when v_local < c.planned_start at time zone 'Africa/Porto-Novo' then 1 else 2 end,
+ order by case when v_local between (c.planned_start at time zone 'Africa/Porto-Novo') and (c.planned_end at time zone 'Africa/Porto-Novo') then 0
+               when v_local < (c.planned_start at time zone 'Africa/Porto-Novo') then 1 else 2 end,
  c.planned_start asc limit 1;
  if not found then raise exception 'NO_TRAINING_SESSION_SCHEDULED_TODAY'; end if;
  perform pg_advisory_xact_lock(hashtextextended(v_uid::text || ':' || v_session.id::text,0));
