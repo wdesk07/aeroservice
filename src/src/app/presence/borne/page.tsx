@@ -174,7 +174,7 @@ export default function PresenceKioskPage() {
         Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
       ).map((code: string) => code.toUpperCase());
 
-      if (profileError || profile?.status !== "active" || roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code))) {
+      if (profileError || String(profile?.status ?? "").trim().toLowerCase() !== "active" || roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code))) {
         await supabase.auth.signOut();
         throw new Error("Ce compte n’est pas autorisé à pointer comme apprenant actif.");
       }
