@@ -759,6 +759,8 @@ export default function Home() {
       <div className="brand"><div className="brand-mark"><img src="/aero-service-logo.svg" alt="Logo officiel Aéro Service" /></div><div><div className="brand-name">AÉRO SERVICE</div><div className="brand-sub">Gestion & formation</div></div></div>
       {["PILOTAGE","PÉDAGOGIE","ORGANISATION","ADMINISTRATION","FINANCES","SYSTÈME"].map(section => visibleModules.some(m=>m.section===section) ? <div key={section}><div className="nav-label">{section}</div>{visibleModules.filter(m=>m.section===section).map(m=><button key={m.key} className={"nav-item"+(active===m.key?" active":"")} onClick={()=>{setActive(m.key);setSearch("");setShowCreate(false);setMobileNav(false);setNotice("");setError("");}}><span className="nav-icon">{m.icon}</span>{m.label}</button>)}</div> : null)}
       <a className="nav-item" href="/presence/borne"><span className="nav-icon">◉</span>Borne de présence</a>
+      <a className="nav-item" href="/presence/qr-affiche"><span className="nav-icon">▦</span>QR à imprimer</a>
+      <a className="nav-item" href="/presence/secretariat"><span className="nav-icon">✓</span>Pointages à confirmer</a>
       <div className="sidebar-bottom"><div className="sidebar-note">Espace de travail sécurisé<br/>Aéro Service · Gestion intégrée</div></div>
     </aside>
     <section className="main-area">
