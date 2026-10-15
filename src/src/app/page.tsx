@@ -172,9 +172,9 @@ export default function Home() {
           delay_minutes: row.minutes_after_cutoff ?? 0,
           access_blocked: row.status === "late" || row.status === "absent",
           anomaly_reason: row.status === "late" ? "Retard à régulariser" : row.status === "absent" ? "Absence à régulariser" : null,
-          penalty_id: Array.isArray(row.penalties) ? row.penalties[0]?.id ?? null : row.penalties?.id ?? null,
-          penalty_amount_fcfa: Array.isArray(row.penalties) ? row.penalties[0]?.amount_fcfa ?? null : row.penalties?.amount_fcfa ?? null,
-          penalty_status: Array.isArray(row.penalties) ? row.penalties[0]?.status ?? null : row.penalties?.status ?? null
+          penalty_id: Array.isArray(row.penalties) ? (row.penalties as any[])[0]?.id ?? null : (row.penalties as any)?.id ?? null,
+          penalty_amount_fcfa: Array.isArray(row.penalties) ? (row.penalties as any[])[0]?.amount_fcfa ?? null : (row.penalties as any)?.amount_fcfa ?? null,
+          penalty_status: Array.isArray(row.penalties) ? (row.penalties as any[])[0]?.status ?? null : (row.penalties as any)?.status ?? null
         }));
         setRows(mapped);
         setLoading(false);
