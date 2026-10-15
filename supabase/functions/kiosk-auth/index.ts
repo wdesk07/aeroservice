@@ -39,6 +39,28 @@ Deno.serve(async (req) => {
 
     let email = identifier;
     if (!identifier.includes("@")) {
+      let resolvedEmail: string | null = null;
+
+      // First accept the exact official student number.
+      const { data: student, error: studentError } = await admin.from("students")
+        .select("id,profiles!inner(email)").ilike("student_number", identifier).maybeSingle();
+      if (!studentError && student && student.profiles && typeof student.profiles.email === "string") {
+        resolvedEmail = student.profiles.email;
+      }
+
+      // Some learner accounts use the platform's public ID instead of the student number.
+      if (!resolvedEmail) {
+        const { data: publicProfile, error: publicProfileError } = await admin.from("profiles")
+          .select("email").eq("public_id", identifier).maybeSingle();
+        if (!publicProfileError && typeof publicProfile?.email === "string" && publicProfile.email.includes("@")) {
+          resolvedEmail = publicProfile.email;
+        }
+      }
+
+      // Also support an exact email username (the part before @), but only when it is unique.
+      if (!resolvedEmail && /^[a-zA-Z0-9._%+-]+$/.test(identifier)) {
+        const escapedIdentifier = identifier.replace(/[\\%_]/g, "\\    let email = identifier;
+    if (!identifier.includes("@")) {
       const { data: student, error: studentError } = await admin.from("students")
         .select("id,profiles!inner(email)").ilike("student_number", identifier).maybeSingle();
       if (studentError || !student || !student.profiles || typeof student.profiles.email !== "string") {
@@ -46,6 +68,20 @@ Deno.serve(async (req) => {
         return Response.json({ error: "INVALID_CREDENTIALS" }, { status: 401, headers: cors });
       }
       email = student.profiles.email;
+    }");
+        const { data: emailCandidates, error: emailLookupError } = await admin.from("profiles")
+          .select("email").ilike("email", `${escapedIdentifier}@%`).limit(2);
+        if (!emailLookupError && emailCandidates?.length === 1 &&
+            typeof emailCandidates[0]?.email === "string" && emailCandidates[0].email.includes("@")) {
+          resolvedEmail = emailCandidates[0].email;
+        }
+      }
+
+      if (!resolvedEmail) {
+        await admin.from("kiosk_auth_attempts").insert({ identifier_hash: idHash, success: false });
+        return Response.json({ error: "INVALID_CREDENTIALS" }, { status: 401, headers: cors });
+      }
+      email = resolvedEmail;
     }
 
     const { data, error } = await client.auth.signInWithPassword({ email, password });
