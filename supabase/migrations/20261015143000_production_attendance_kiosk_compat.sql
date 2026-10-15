@@ -210,3 +210,61 @@ create index if not exists kiosk_auth_attempts_identifier_time_idx
   on public.kiosk_auth_attempts(identifier_hash, attempted_at desc);
 alter table public.kiosk_auth_attempts enable row level security;
 revoke all on public.kiosk_auth_attempts from anon, authenticated;
+
+
+-- Absence justification workflow uses the existing production tables and does not rewrite attendance records.
+create or replace function public.submit_absence_justification(
+ p_attendance_id uuid, p_reason_type text, p_reason text, p_document_url text default null
+) returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare
+ v_uid uuid := auth.uid();
+ v_att public.attendance%rowtype;
+ v_id uuid;
+begin
+ if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+ if nullif(trim(coalesce(p_reason_type,'')),'') is null then raise exception 'JUSTIFICATION_REASON_REQUIRED'; end if;
+ if nullif(trim(coalesce(p_reason,'')),'') is null then raise exception 'JUSTIFICATION_DETAILS_REQUIRED'; end if;
+ select * into v_att from public.attendance a
+ where a.id=p_attendance_id and a.person_id=v_uid
+ and lower(a.status) in ('absent','absence','missing');
+ if not found then raise exception 'ABSENCE_RECORD_NOT_FOUND'; end if;
+ if exists(select 1 from public.absence_justifications j
+   where j.attendance_id=p_attendance_id and j.status='pending') then
+   raise exception 'JUSTIFICATION_ALREADY_PENDING';
+ end if;
+ insert into public.absence_justifications(attendance_id,person_id,reason_type,reason,document_url,status)
+ values(p_attendance_id,v_uid,left(trim(p_reason_type),80),left(trim(p_reason),3000),nullif(trim(p_document_url),''),'pending')
+ returning id into v_id;
+ return jsonb_build_object('ok',true,'id',v_id,'status','pending');
+end;
+$$;
+revoke all on function public.submit_absence_justification(uuid,text,text,text) from public, anon;
+grant execute on function public.submit_absence_justification(uuid,text,text,text) to authenticated;
+
+create or replace function public.review_absence_justification(
+ p_justification_id uuid, p_decision text, p_comment text default null
+) returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare
+ v_uid uuid := auth.uid();
+ v_status text;
+begin
+ if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+ if not public.kiosk_actor_has_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY']) then
+   raise exception 'JUSTIFICATION_REVIEW_FORBIDDEN';
+ end if;
+ if p_decision not in ('approved','rejected') then raise exception 'INVALID_JUSTIFICATION_DECISION'; end if;
+ update public.absence_justifications
+ set status=p_decision,reviewed_by=v_uid,reviewed_at=clock_timestamp(),
+     review_comment=nullif(left(trim(coalesce(p_comment,'')),2000),'')
+ where id=p_justification_id and status='pending'
+ returning status into v_status;
+ if not found then raise exception 'PENDING_JUSTIFICATION_NOT_FOUND'; end if;
+ return jsonb_build_object('ok',true,'status',v_status,'reviewed_at',clock_timestamp());
+end;
+$$;
+revoke all on function public.review_absence_justification(uuid,text,text) from public, anon;
+grant execute on function public.review_absence_justification(uuid,text,text) to authenticated;
