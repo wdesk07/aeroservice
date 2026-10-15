@@ -180,8 +180,9 @@ export default function Home() {
     const cols = config.columns?.join(",") || "*";
     let result = await supabase.from(config.table).select(cols).limit(100);
     // TEST currently stores QR-created attendance in daily_attendance; production uses attendance.
-    // Fall back only for the attendance module and normalize TEST field names for the existing table.
-    if (result.error && key === "attendance") {
+    // Try the TEST table when the production-shaped table is unavailable OR empty,
+    // otherwise the UI can misleadingly show "Aucune donnée" while TEST rows exist.
+    if (key === "attendance" && (result.error || !(result.data?.length))) {
       const fallback = await supabase.from("daily_attendance").select("*,penalties(id,amount_fcfa,status)").limit(100);
       if (!fallback.error) {
         const mapped = (fallback.data ?? []).map((row: Record<string, unknown>) => ({
@@ -195,6 +196,12 @@ export default function Home() {
           penalty_status: Array.isArray(row.penalties) ? (row.penalties as any[])[0]?.status ?? null : (row.penalties as any)?.status ?? null
         }));
         setRows(mapped);
+        setLoading(false);
+        return;
+      }
+      if (result.error || !(result.data?.length)) {
+        setRows([]);
+        setError("Impossible de lire les pointages de test. Vérifiez les autorisations de lecture (RLS) sur daily_attendance.");
         setLoading(false);
         return;
       }
