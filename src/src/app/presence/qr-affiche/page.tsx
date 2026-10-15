@@ -10,22 +10,48 @@ const supabase = createClient(
 
 export default function QrPosterPage() {
   const [targetUrl, setTargetUrl] = useState("");
+  const [authorized, setAuthorized] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
+
   useEffect(() => {
-    setTargetUrl(window.location.origin + "/presence/qr");
+    let alive = true;
+    async function verifyAccess() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentUser = sessionData.session?.user;
+      if (!currentUser) {
+        if (alive) setCheckingAccess(false);
+        return;
+      }
+      const { data } = await supabase.from("user_roles").select("roles(code)").eq("user_id", currentUser.id);
+      const codes = (data ?? []).flatMap((entry: any) =>
+        Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
+      ).map((code: string) => String(code).toUpperCase());
+      const allowed = codes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"].includes(code));
+      if (alive) {
+        setAuthorized(allowed);
+        setCheckingAccess(false);
+        if (allowed) setTargetUrl(window.location.origin + "/presence/qr");
+      }
+    }
+    void verifyAccess();
+    return () => { alive = false; };
   }, []);
+
   const qrImage = targetUrl
     ? "https://api.qrserver.com/v1/create-qr-code/?size=360x360&format=png&margin=12&data=" + encodeURIComponent(targetUrl)
     : "";
 
   if (checkingAccess || !authorized) {
-    return <main style={{ minHeight: "100vh", background: "#eef2f7", color: "#15243a", padding: 24, fontFamily: "Arial,sans-serif" }}>
-      <section style={{ maxWidth: 560, margin: "8vh auto", padding: 28, borderRadius: 16, background: "#fff", border: "1px solid #d4deeb", textAlign: "center" }}>
-        <img src="/aero-service-logo.svg" alt="Logo Aéro Service" style={{ width: 90, height: 70, objectFit: "contain" }} />
-        <h1 style={{ marginBottom: 8 }}>QR officiel du centre</h1>
-        <p style={{ lineHeight: 1.6, color: "#52647a" }}>{checkingAccess ? "Vérification de vos autorisations…" : "L’impression du QR officiel est réservée à la Direction, à la pré-administration et au secrétariat. Connectez-vous avec un compte autorisé."}</p>
-        {!checkingAccess && <a href="/" style={{ display: "inline-block", marginTop: 8, color: "#174ea6", fontWeight: 700 }}>Se connecter à Aéro Service</a>}
-      </section>
-    </main>;
+    return (
+      <main style={{ minHeight: "100vh", background: "#eef2f7", color: "#15243a", padding: 24, fontFamily: "Arial,sans-serif" }}>
+        <section style={{ maxWidth: 560, margin: "8vh auto", padding: 28, borderRadius: 16, background: "#fff", border: "1px solid #d4deeb", textAlign: "center" }}>
+          <img src="/aero-service-logo.svg" alt="Logo Aéro Service" style={{ width: 90, height: 70, objectFit: "contain" }} />
+          <h1 style={{ marginBottom: 8 }}>QR officiel du centre</h1>
+          <p style={{ lineHeight: 1.6, color: "#52647a" }}>{checkingAccess ? "Vérification de vos autorisations…" : "L’impression du QR officiel est réservée à la Direction, à la pré-administration et au secrétariat. Connectez-vous avec un compte autorisé."}</p>
+          {!checkingAccess && <a href="/" style={{ display: "inline-block", marginTop: 8, color: "#174ea6", fontWeight: 700 }}>Se connecter à Aéro Service</a>}
+        </section>
+      </main>
+    );
   }
 
   return (
