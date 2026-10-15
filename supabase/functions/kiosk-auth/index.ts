@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     ]);
     const roles = (roleRows ?? []).flatMap((row: any) => Array.isArray(row.roles) ? row.roles : row.roles ? [row.roles] : [])
       .map((role: any) => String(role.code ?? "").toUpperCase());
-    if (profileError || roleError || profile?.status !== "active" ||
+    if (profileError || roleError || String(profile?.status ?? "").trim().toLowerCase() !== "active" ||
         !roles.some((role: string) => ["STUDENT", "APPRENANT"].includes(role)) ||
         roles.some((role: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARY", "SECRETARIAT"].includes(role))) {
       await client.auth.signOut();
