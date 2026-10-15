@@ -240,6 +240,8 @@ create index if not exists kiosk_auth_attempts_identifier_time_idx
   on public.kiosk_auth_attempts(identifier_hash, attempted_at desc);
 alter table public.kiosk_auth_attempts enable row level security;
 revoke all on public.kiosk_auth_attempts from anon, authenticated;
+grant select, insert on public.kiosk_auth_attempts to service_role;
+grant usage, select on sequence public.kiosk_auth_attempts_id_seq to service_role;
 
 
 -- Absence justification workflow uses the existing production tables and does not rewrite attendance records.
