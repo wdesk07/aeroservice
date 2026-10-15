@@ -191,7 +191,8 @@ begin
  if found then
    return jsonb_build_object('ok',true,'duplicate',true,'status',v_att.status,'arrived_at',v_att.arrived_at,'delay_minutes',v_att.delay_minutes);
  end if;
- v_raw_delay := greatest(0,floor(extract(epoch from (v_now-v_session.planned_start))/60)::integer);
+ -- Zero tolerance means even a positive delay under one minute is late.
+  v_raw_delay := greatest(0,ceil(extract(epoch from (v_now-v_session.planned_start))/60)::integer);
  -- Select the configured penalty tier that matches this actual delay, including the zero-tolerance rule.
  select * into v_rule from public.penalty_rules r
  where r.active and r.penalty_type='late_arrival'
