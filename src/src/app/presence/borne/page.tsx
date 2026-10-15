@@ -21,7 +21,7 @@ function errorMessage(raw: string) {
   const messages: Record<string, string> = {
     AUTH_REQUIRED: "La session a expiré. Reconnectez-vous sur la borne.",
     KIOSK_NOT_REGISTERED: "Cette borne n’est pas activée. Demandez à la Direction de l’enregistrer.",
-    KIOSK_ADMIN_REQUIRED: "Seule la Direction ou la pré-administration peut ouvrir ou fermer la journée et gérer la borne.",
+    KIOSK_ADMIN_REQUIRED: "Seuls la Direction, la pré-administration ou le secrétariat autorisé peuvent ouvrir ou fermer la journée et gérer la borne.",
     OPERATING_DAY_CLOSED: "La journée est fermée. La Direction doit ouvrir la journée et activer la borne.",
     OPERATING_DAY_ALREADY_CLOSED: "La journée est déjà fermée. La borne ne peut plus être activée aujourd’hui.",
     OPERATING_DAY_NOT_OPEN: "Aucune journée ouverte à fermer. Ouvrez d’abord la journée et activez la borne.",
@@ -69,7 +69,7 @@ export default function PresenceKioskPage() {
         Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
       ).map((code: string) => code.toUpperCase());
       if (alive) {
-        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code)));
+        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY"].includes(code)));
         setLoading(false);
       }
     }
@@ -260,7 +260,7 @@ export default function PresenceKioskPage() {
         {!loading && user && isAdmin && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
-            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction et à la pré-administration. L’ouverture de la journée active cette borne et crée un jeton sécurisé; la fermeture révoque les jetons actifs.</p>
+            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction, à la pré-administration et au secrétariat autorisé. La secrétaire peut ouvrir la journée, créer le jeton et activer la borne, puis fermer la journée en fin de service. Cela ne lui donne pas les autres droits de Direction. La fermeture révoque les jetons actifs.</p>
             {deviceRegistered ? (
               <>
                 <p style={{ color: "#17663b", fontWeight: 700 }}>Cette session possède déjà un jeton de borne.</p>
@@ -279,7 +279,7 @@ export default function PresenceKioskPage() {
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage apprenant</h2>
             {!deviceRegistered ? (
-              <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Connectez-vous avec un compte Direction ou PRE_ADMIN sur la plateforme, puis ouvrez cette page pour enregistrer l’appareil.</p>
+              <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Connectez-vous avec un compte Direction, PRE_ADMIN ou secrétariat autorisé sur la plateforme, puis ouvrez cette page pour enregistrer l’appareil.</p>
             ) : (
               <>
                 <p style={{ color: "#52647a", lineHeight: 1.5 }}>Présentez-vous à la borne officielle. Le pointage personnel depuis un téléphone n’est pas autorisé. Le GPS est un contrôle complémentaire quand il est disponible.</p>
