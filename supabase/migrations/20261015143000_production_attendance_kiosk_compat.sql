@@ -136,7 +136,7 @@ declare
  v_device public.presence_kiosk_devices%rowtype;
  v_att public.attendance%rowtype;
  v_delay integer;
- v_cutoff timestamptz;
+ v_raw_delay integer;
  v_penalty uuid;
  v_has_rule boolean := false;
 begin
@@ -165,18 +165,22 @@ begin
  if found then
    return jsonb_build_object('ok',true,'duplicate',true,'status',v_att.status,'arrived_at',v_att.arrived_at,'delay_minutes',v_att.delay_minutes);
  end if;
+ v_raw_delay := greatest(0,floor(extract(epoch from (v_now-v_session.planned_start))/60)::integer);
+ -- Select the configured penalty tier that matches this actual delay, including the zero-tolerance rule.
  select * into v_rule from public.penalty_rules r
  where r.active and r.penalty_type='late_arrival'
  and r.person_type in ('student','STUDENT','all','ALL')
+ and v_raw_delay > greatest(coalesce(r.tolerance_minutes,0),0)
+ and v_raw_delay >= r.min_delay_minutes
+ and (r.max_delay_minutes is null or v_raw_delay <= r.max_delay_minutes)
  and (r.effective_from is null or r.effective_from<=v_now)
  and (r.effective_until is null or r.effective_until>=v_now)
- order by r.priority asc, r.created_at desc limit 1;
+ order by r.priority asc, r.min_delay_minutes desc, r.created_at desc limit 1;
  v_has_rule := found;
- v_cutoff := v_session.planned_start + make_interval(mins => case when v_has_rule then greatest(v_rule.tolerance_minutes,0) else 0 end);
- v_delay := greatest(0,floor(extract(epoch from (v_now-v_cutoff))/60)::integer);
+ v_delay := v_raw_delay;
  insert into public.attendance(session_id,person_id,person_type,status,planned_at,arrived_at,delay_minutes,access_blocked,source,latitude,longitude,location_accuracy_m)
- values(v_session.id,v_uid,'student',case when v_delay>0 then 'late' else 'present' end,
-   v_session.planned_start,v_now,v_delay,case when v_delay>0 and v_has_rule then v_rule.blocks_access else false end,
+ values(v_session.id,v_uid,'student',case when v_raw_delay>0 then 'late' else 'present' end,
+   v_session.planned_start,v_now,v_delay,case when v_has_rule then v_rule.blocks_access else false end,
    'kiosk',p_lat,p_lng,p_accuracy_m)
  returning * into v_att;
  insert into public.attendance_events(attendance_id,person_id,event_type,occurred_at,source,metadata,created_by)
