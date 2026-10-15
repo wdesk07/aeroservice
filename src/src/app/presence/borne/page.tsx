@@ -42,6 +42,7 @@ export default function PresenceKioskPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [canConfigureLocation, setCanConfigureLocation] = useState(false);
   const [deviceRegistered, setDeviceRegistered] = useState(false);
   const [operatingDayStatus, setOperatingDayStatus] = useState<"open" | "closed" | "not_opened" | "unknown">("unknown");
   const [identifier, setIdentifier] = useState("");
@@ -62,6 +63,7 @@ export default function PresenceKioskPage() {
       setUser(nextUser);
       if (!nextUser) {
         setIsAdmin(false);
+        setCanConfigureLocation(false);
         setLoading(false);
         return;
       }
@@ -71,6 +73,7 @@ export default function PresenceKioskPage() {
       ).map((code: string) => code.toUpperCase());
       if (alive) {
         setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY"].includes(code)));
+        setCanConfigureLocation(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code)));
         setLoading(false);
       }
     }
@@ -190,6 +193,47 @@ export default function PresenceKioskPage() {
     }
   }
 
+  async function configureCheckpointLocation() {
+    if (!canConfigureLocation) {
+      setMessage("Seule la Direction ou la pré-administration peut configurer le GPS du centre.");
+      return;
+    }
+    if (!navigator.geolocation) {
+      setMessage("Ce navigateur ne prend pas en charge la géolocalisation.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          () => reject(new Error("GPS_REQUIRED")),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
+      if (!Number.isFinite(position.coords.accuracy) || position.coords.accuracy > 100) {
+        throw new Error("GPS_ACCURACY_TOO_LOW");
+      }
+      const { data, error } = await supabase.rpc("set_attendance_checkpoint_location", {
+        p_latitude: position.coords.latitude,
+        p_longitude: position.coords.longitude,
+        p_radius_m: 100
+      });
+      if (error || !data?.ok) throw new Error(error?.message || "CHECKPOINT_CONFIG_FAILED");
+      setMessage("Zone GPS du centre enregistrée avec un rayon de 100 m. Cette action doit être faite physiquement à l’entrée d’Aéro Service, pas depuis le domicile.");
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "Configuration GPS impossible.";
+      setMessage(raw.includes("GPS_ACCURACY_TOO_LOW")
+        ? "Position GPS trop imprécise. Réessayez dehors, à l’entrée du centre."
+        : raw.includes("GPS_REQUIRED")
+          ? "Autorisez la localisation et réessayez physiquement à l’entrée du centre."
+          : errorMessage(raw));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function recordPresence() {
     if (!deviceRegistered || !user) {
       setMessage("La borne doit être activée et l’apprenant doit être connecté.");
@@ -266,6 +310,11 @@ export default function PresenceKioskPage() {
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
             <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction, à la pré-administration et au secrétariat autorisé. La secrétaire peut ouvrir la journée, créer le jeton et activer la borne, puis fermer la journée en fin de service. Cela ne lui donne pas les autres droits de Direction. La fermeture révoque les jetons actifs.</p>
+            {canConfigureLocation && <div style={{ border: "1px solid #dce4ef", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <strong>Zone GPS du centre</strong>
+              <p style={{ margin: "6px 0 10px", color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>Placez-vous physiquement à l’entrée du centre, activez le GPS puis enregistrez sa position. La zone autorisée est réglée à 100 mètres autour de ce point.</p>
+              <button type="button" onClick={() => void configureCheckpointLocation()} disabled={busy} style={secondaryButton}>{busy ? "Enregistrement…" : "Enregistrer la position GPS du centre"}</button>
+            </div>}
             {deviceRegistered ? (
               <>
                 <p style={{ color: "#17663b", fontWeight: 700 }}>Cette session possède déjà un jeton de borne.</p>
