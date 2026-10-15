@@ -225,6 +225,7 @@ begin
                when v_local < (c.planned_start at time zone 'Africa/Porto-Novo') then 1 else 2 end,
  c.planned_start asc limit 1;
  if not found then raise exception 'NO_TRAINING_SESSION_SCHEDULED_TODAY'; end if;
+ if v_local > (v_session.planned_end at time zone 'Africa/Porto-Novo') then raise exception 'CHECKIN_WINDOW_CLOSED'; end if;
  perform pg_advisory_xact_lock(hashtextextended(v_uid::text || ':' || v_session.id::text,0));
  select * into v_att from public.attendance a where a.person_id=v_uid and a.session_id=v_session.id
  and a.person_type in ('student','STUDENT') order by a.created_at desc limit 1;
