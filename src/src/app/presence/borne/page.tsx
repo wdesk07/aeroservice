@@ -247,7 +247,7 @@ export default function PresenceKioskPage() {
     <main style={{ minHeight: "100vh", background: "#f3f6fa", color: "#15243a", padding: "28px 16px", fontFamily: "Arial, sans-serif" }}>
       <section style={{ maxWidth: 620, margin: "0 auto", background: "#fff", border: "1px solid #dce4ef", borderRadius: 18, padding: 24, boxShadow: "0 8px 30px rgba(24,48,80,.08)" }}>
         <header style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
-          <img src="/logo-aero-services.jpg" alt="Logo Aéro Service" style={{ width: 76, height: 64, objectFit: "contain" }} />
+          <img src="/aero-service-logo.svg" alt="Logo Aéro Service" style={{ width: 76, height: 64, objectFit: "contain" }} />
           <div>
             <p style={{ margin: "0 0 4px", fontSize: 12, letterSpacing: 1.2, fontWeight: 700, color: "#45627f" }}>AÉRO SERVICE</p>
             <h1 style={{ margin: 0, fontSize: 26 }}>Borne officielle de présence</h1>
