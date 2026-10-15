@@ -105,6 +105,28 @@ export default function Home() {
   const [ruleForm, setRuleForm] = useState({ formation_id: "", penalty_type: "late_arrival", description: "", target_scope: "students", application_mode: "automatic", applies_after_time: "", min_delay_minutes: "1", max_delay_minutes: "20", tolerance_minutes: "0", amount_fcfa: "1000" });
   const [applyRuleForm, setApplyRuleForm] = useState({ rule_id: "", person_id: "" });
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedModule = params.get("module");
+    const personId = params.get("person_id") || "";
+    const penaltyId = params.get("penalty_id") || "";
+    if (requestedModule === "payments" && penaltyId) {
+      setActive("payments");
+      setShowCreate(true);
+      setCreateValues({
+        payment_type: "penalty",
+        penalty_id: penaltyId,
+        payment_category: "penalty",
+        person_id: personId,
+        amount_fcfa: params.get("amount_fcfa") || "",
+        payment_description: "Règlement de pénalité après pointage QR"
+      });
+    } else if (requestedModule === "penalties") {
+      setActive("penalties");
+      setSearch(params.get("search") || "");
+    }
+  }, []);
+
   const loadIdentity = useCallback(async (current: User) => {
     const [{ data: p }, { data: r }] = await Promise.all([
       supabase.from("profiles").select("id,public_id,first_name,last_name,display_name,email,status").eq("id", current.id).maybeSingle(),
