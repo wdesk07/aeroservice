@@ -111,12 +111,12 @@ begin
        )
    ), created_absences as (
      insert into public.attendance(session_id,person_id,person_type,status,planned_at,access_blocked,source)
-     select ms.session_id,ms.person_id,'student','absent',ms.planned_start,false,'kiosk_day_close'
+     select ms.session_id,ms.person_id,'student','absent',ms.planned_start,false,'kiosk'
      from missing_sessions ms
      returning id,person_id
    )
    insert into public.attendance_events(attendance_id,person_id,event_type,occurred_at,source,metadata,created_by)
-   select ca.id,ca.person_id,'absence_auto_closed',v_now,'kiosk_day_close',
+   select ca.id,ca.person_id,'absence_detected',v_now,'kiosk',
      jsonb_build_object('business_date',v_date),v_uid
    from created_absences ca;
    get diagnostics v_absences = row_count;
@@ -205,12 +205,12 @@ begin
  v_has_rule := found;
  v_delay := v_raw_delay;
  insert into public.attendance(session_id,person_id,person_type,status,planned_at,arrived_at,delay_minutes,access_blocked,source,latitude,longitude,location_accuracy_m)
- values(v_session.id,v_uid,'student',case when v_raw_delay>0 then 'late' else 'present' end,
+ values(v_session.id,v_uid,'student',case when v_raw_delay>0 then 'late' else 'on_time' end,
    v_session.planned_start,v_now,v_delay,case when v_has_rule then v_rule.blocks_access else false end,
    'kiosk',p_lat,p_lng,p_accuracy_m)
  returning * into v_att;
  insert into public.attendance_events(attendance_id,person_id,event_type,occurred_at,source,metadata,created_by)
- values(v_att.id,v_uid,case when v_delay>0 then 'late_checkin' else 'checkin' end,v_now,'kiosk',
+ values(v_att.id,v_uid,case when v_delay>0 then 'late_detected' else 'pointage' end,v_now,'kiosk',
    jsonb_build_object('session_id',v_session.id,'delay_minutes',v_delay,'tolerance_minutes',case when v_has_rule then v_rule.tolerance_minutes else 0 end),v_uid);
  if v_delay>0 and v_has_rule and v_rule.amount_fcfa>0
     and v_delay>=v_rule.min_delay_minutes
