@@ -71,6 +71,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [identityReady, setIdentityReady] = useState(false);
   const [active, setActive] = useState<ModuleKey>("dashboard");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -135,6 +136,7 @@ export default function Home() {
     setProfile((p as Profile | null) ?? null);
     const roleData = (r ?? []).flatMap((item: any) => Array.isArray(item.roles) ? item.roles : item.roles ? [item.roles] : []) as Role[];
     setRoles(roleData);
+    setIdentityReady(true);
   }, []);
 
   const loadCounts = useCallback(async () => {
@@ -234,6 +236,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    setIdentityReady(false);
     if (!user) { setProfile(null); setRoles([]); setCounts({}); setRows([]); return; }
     void loadIdentity(user);
     void loadCounts();
@@ -247,7 +250,7 @@ export default function Home() {
   }, [user, active]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !identityReady) return;
     if (!canAccessModule(active, roles.map(role => role.code))) {
       setActive("dashboard"); setRows([]); setShowCreate(false);
       setError("Le menu demandé n’est pas autorisé pour votre rôle. Vous avez été redirigé vers votre espace.");
