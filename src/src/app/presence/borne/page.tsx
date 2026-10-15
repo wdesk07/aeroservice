@@ -30,6 +30,7 @@ function errorMessage(raw: string) {
     SERVICE_UNAVAILABLE: "Le service de connexion est temporairement indisponible. Réessayez plus tard.",
     ACTIVE_STUDENT_REQUIRED: "Ce compte n’est pas un compte apprenant actif autorisé au pointage.",
     STUDENT_CHECKIN_CLOSED: "La période de pointage quotidien est fermée.",
+    CHECKIN_WINDOW_CLOSED: "La séance est terminée. Aucun nouveau pointage n’est accepté pour cette séance.",
     OUTSIDE_CHECKPOINT_RADIUS: "La position détectée est hors de la zone autorisée du centre.",
     "Invalid login credentials": "Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe.",
   };
