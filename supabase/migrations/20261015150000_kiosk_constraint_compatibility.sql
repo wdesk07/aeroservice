@@ -7,13 +7,13 @@ alter table public.attendance
 alter table public.attendance
   add constraint attendance_status_check
     check (status = any (array[
-      'on_time','present','late','regularized_late','absent',
+      'on_time','late','regularized_late','absent',
       'justification_pending','excused_absence'
     ]::text[])),
   add constraint attendance_source_check
     check (source = any (array[
       'qr','biometric','face','fingerprint','secretariat','manual','hybrid',
-      'kiosk','kiosk_day_close'
+      'kiosk'
     ]::text[]));
 
 alter table public.attendance_events
