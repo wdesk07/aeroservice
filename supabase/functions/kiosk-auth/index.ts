@@ -59,16 +59,7 @@ Deno.serve(async (req) => {
 
       // Also support an exact email username (the part before @), but only when it is unique.
       if (!resolvedEmail && /^[a-zA-Z0-9._%+-]+$/.test(identifier)) {
-        const escapedIdentifier = identifier.replace(/[\\%_]/g, "\\    let email = identifier;
-    if (!identifier.includes("@")) {
-      const { data: student, error: studentError } = await admin.from("students")
-        .select("id,profiles!inner(email)").ilike("student_number", identifier).maybeSingle();
-      if (studentError || !student || !student.profiles || typeof student.profiles.email !== "string") {
-        await admin.from("kiosk_auth_attempts").insert({ identifier_hash: idHash, success: false });
-        return Response.json({ error: "INVALID_CREDENTIALS" }, { status: 401, headers: cors });
-      }
-      email = student.profiles.email;
-    }");
+        const escapedIdentifier = identifier.split("").map((character) => ["\", "%", "_"].includes(character) ? "\" + character : character).join("");
         const { data: emailCandidates, error: emailLookupError } = await admin.from("profiles")
           .select("email").ilike("email", `${escapedIdentifier}@%`).limit(2);
         if (!emailLookupError && emailCandidates?.length === 1 &&
