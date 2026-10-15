@@ -23,6 +23,5 @@ alter table public.attendance_events
   add constraint attendance_events_event_type_check
     check (event_type = any (array[
       'pointage','late_detected','absence_detected','regularized','blocked',
-      'unblocked','correction','anomaly','checkin','late_checkin',
-      'absence_auto_closed'
+      'unblocked','correction','anomaly'
     ]::text[]));
