@@ -413,7 +413,7 @@ export default function Home() {
       setNewAccount({ display_name: "", email: "", password: "", phone: "", role_code: "STUDENT", formation_id: "" });
     } else {
       setNotice("Compte créé et rôle attribué : " + data.role_code + ". L’utilisateur peut maintenant se connecter avec les identifiants créés.");
-      setNewAccount({ display_name: "", email: "", password: "", phone: "", role_code: "STUDENT" });
+      setNewAccount({ display_name: "", email: "", password: "", phone: "", role_code: "STUDENT", formation_id: "" });
     }
     setBusy(false);
   }
