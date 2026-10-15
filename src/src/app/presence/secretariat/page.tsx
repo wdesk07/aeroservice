@@ -47,6 +47,11 @@ export default function SecretariatQrCheckinsPage() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => { void loadRequests(); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [loadRequests]);
+
+  useEffect(() => {
     let alive = true;
     async function init() {
       const { data } = await supabase.auth.getSession();
