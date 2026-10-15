@@ -56,10 +56,10 @@ begin
   insert into public.students(id,student_number,formation_id,group_id,enrollment_date)
   values(v_reg.person_id,v_student_number,v_reg.formation_id,v_reg.group_id,coalesce(v_reg.registration_date,current_date))
   on conflict (id) do update set
-    student_number = coalesce(nullif(public.students.student_number,''), excluded.student_number),
-    formation_id = coalesce(public.students.formation_id, excluded.formation_id),
-    group_id = coalesce(public.students.group_id, excluded.group_id),
-    enrollment_date = coalesce(public.students.enrollment_date, excluded.enrollment_date);
+    student_number = coalesce(nullif(students.student_number,''), excluded.student_number),
+    formation_id = coalesce(students.formation_id, excluded.formation_id),
+    group_id = coalesce(students.group_id, excluded.group_id),
+    enrollment_date = coalesce(students.enrollment_date, excluded.enrollment_date);
 
   return jsonb_build_object(
     'ok',true,'status','approved','person_id',v_reg.person_id,
