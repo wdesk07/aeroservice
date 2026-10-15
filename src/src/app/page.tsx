@@ -9,6 +9,7 @@ const supabase: SupabaseClient = createClient(
 );
 
 type Profile = { id: string; public_id?: string | null; first_name?: string | null; last_name?: string | null; display_name?: string | null; email?: string | null; status?: string };
+type AccountFormation = { id: string; code?: string | null; name?: string | null; status?: string | null };
 type Role = { code: string; name: string };
 type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups" | "subjects" | "rooms" | "registrations" | "attendance" | "justifications" | "penalties" | "payments" | "staff" | "roles" | "settings";
 type ModuleConfig = { key: ModuleKey; label: string; icon: string; table?: string; columns?: string[]; description: string; section: string };
@@ -70,6 +71,8 @@ const canAccessModule = (key: ModuleKey, roleCodes: string[]) => {
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [accountFormation, setAccountFormation] = useState<AccountFormation | null>(null);
+  const [studentNumber, setStudentNumber] = useState<string | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [identityReady, setIdentityReady] = useState(false);
   const [active, setActive] = useState<ModuleKey>("dashboard");
@@ -129,6 +132,17 @@ export default function Home() {
   }, []);
 
   const loadIdentity = useCallback(async (current: User) => {
+    // Secure server-side lookup avoids the profile/formation RLS read failure in the learner workspace.
+    const { data: accountData, error: accountError } = await supabase.functions.invoke("my-account-status");
+    if (!accountError && accountData) {
+      setProfile((accountData.profile as Profile | null) ?? null);
+      setRoles((accountData.roles ?? []) as Role[]);
+      setAccountFormation((accountData.formation as AccountFormation | null) ?? null);
+      setStudentNumber(typeof accountData.student_number === "string" ? accountData.student_number : null);
+      setIdentityReady(true);
+      return;
+    }
+    // Safe fallback for environments where the account-status function has not yet been deployed.
     const [{ data: p }, { data: r }] = await Promise.all([
       supabase.from("profiles").select("id,public_id,first_name,last_name,display_name,email,status").eq("id", current.id).maybeSingle(),
       supabase.from("user_roles").select("roles(code,name)").eq("user_id", current.id)
@@ -136,6 +150,8 @@ export default function Home() {
     setProfile((p as Profile | null) ?? null);
     const roleData = (r ?? []).flatMap((item: any) => Array.isArray(item.roles) ? item.roles : item.roles ? [item.roles] : []) as Role[];
     setRoles(roleData);
+    setAccountFormation(null);
+    setStudentNumber(null);
     setIdentityReady(true);
   }, []);
 
@@ -237,7 +253,7 @@ export default function Home() {
 
   useEffect(() => {
     setIdentityReady(false);
-    if (!user) { setProfile(null); setRoles([]); setCounts({}); setRows([]); return; }
+    if (!user) { setProfile(null); setRoles([]); setAccountFormation(null); setStudentNumber(null); setCounts({}); setRows([]); return; }
     void loadIdentity(user);
     void loadCounts();
   }, [user, loadIdentity, loadCounts]);
@@ -848,8 +864,8 @@ export default function Home() {
             {key:"payments" as ModuleKey,icon:"₣",title:"Suivi des paiements",desc:"Consulter les règlements"},
             {key:"roles" as ModuleKey,icon:"⚿",title:"Rôles & autorisations",desc:"Consulter les rôles configurés"}
           ].filter(q => canAccessModule(q.key, roleCodes)).map(q=><button className="quick-action" key={q.key} onClick={()=>{setActive(q.key);setSearch("");setError("");}}><span className="quick-icon">{q.icon}</span><span><div className="quick-title">{q.title}</div><div className="quick-desc">{q.desc}</div></span><span style={{marginLeft:"auto",color:"#9aa8b8"}}>→</span></button>)}</div></div></div>}
-          {isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre espace apprenant</div><div className="panel-desc">Bienvenue dans votre espace personnel. Les informations pédagogiques et votre suivi doivent être consultés depuis les rubriques qui vous sont autorisées.</div></div></div><div className="panel-body">Votre rôle actuel : <strong>Apprenant</strong>. Les fonctions de gestion, les dossiers d’autres apprenants, le personnel et les paramètres administratifs ne sont pas accessibles depuis ce compte.</div></div>}
-          <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"À vérifier"}</span></div></div></div></div>
+          {isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre formation</div><div className="panel-desc">Formation affectée à votre compte lors de la création par le Secrétariat.</div></div><span className="pill active">Compte apprenant</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Formation</div><div style={{fontSize:15,fontWeight:700,marginTop:7}}>{accountFormation?.name || "Formation non récupérée"}</div></div><div><div className="stat-foot">Code</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{accountFormation?.code || "—"}</div></div><div><div className="stat-foot">Numéro apprenant</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{studentNumber || "Non renseigné"}</div></div><div><div className="stat-foot">État de la formation</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{accountFormation?.status ? pretty(accountFormation.status) : "Non disponible"}</div></div></div></div>}
+          <div className="panel"><div className="panel-head"><div><div className="panel-title">Votre session</div><div className="panel-desc">Informations du compte actuellement connecté.</div></div><span className="pill active">● Connecté</span></div><div className="panel-body" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:20}}><div><div className="stat-foot">Adresse e-mail</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{user.email}</div></div><div><div className="stat-foot">Identifiant public</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{profile?.public_id||"Non renseigné"}</div></div><div><div className="stat-foot">Rôles attribués</div><div style={{fontSize:13,fontWeight:700,marginTop:7}}>{roles.map(r=>r.name).join(", ")||"Aucun rôle chargé"}</div></div><div><div className="stat-foot">Statut du profil</div><div style={{marginTop:7}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status ? pretty(profile.status) : identityReady ? "Statut indisponible" : "Chargement…"}</span></div></div></div></div>
         </>}
         {active!=="dashboard" && active!=="settings" && <>
           <div className="page-heading"><div><div className="eyebrow">{activeModule.section}</div><h1 className="page-title">{activeModule.label}</h1><p className="page-subtitle">{active === "attendance" ? "Enregistrez le retard, validez le montant payé et autorisez l’accès à l’apprenant." : activeModule.description}</p></div>{((["formations","students","registrations","groups","subjects","rooms"].includes(active)&&(isAdmin||(active==="registrations"&&canCreateStaffAccount)))||(active==="penalties"&&roles.some(role=>["SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE","DIRECTOR","PRE_ADMIN","ADMIN"].includes(role.code.toUpperCase())))||(active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()))))&&<button className="btn btn-primary" onClick={()=>setShowCreate(!showCreate)}>{showCreate?"Fermer":active==="formations"?"＋ Ajouter une formation":active==="students"?"＋ Ajouter un dossier":active==="registrations"?"＋ Nouvelle inscription":active==="groups"?"＋ Ajouter un groupe":active==="subjects"?"＋ Ajouter une matière":active==="payments"?"＋ Enregistrer un paiement":active==="penalties"?"＋ Nouvelle pénalité":"＋ Ajouter une salle"}</button>}</div>
