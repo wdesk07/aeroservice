@@ -226,32 +226,3 @@ end;
 $$;
 revoke all on function public.review_qr_checkin_request(uuid,text,text) from public, anon;
 grant execute on function public.review_qr_checkin_request(uuid,text,text) to authenticated;
-
--- A validated penalty payment is the only event that releases a late learner into class.
-create or replace function private.sync_validated_penalty_payment_to_access()
-returns trigger language plpgsql security definer set search_path = ''
-as $$
-declare
-  v_attendance_id uuid;
-begin
-  if new.status='validated' and old.status is distinct from 'validated'
-     and new.payment_type='penalty' and new.penalty_id is not null then
-    update public.penalties set status='paid'
-      where id=new.penalty_id and status='pending';
-    select p.attendance_id into v_attendance_id from public.penalties p where p.id=new.penalty_id;
-    if v_attendance_id is not null then
-      update public.attendance set status='regularized_late',access_blocked=false
-        where id=v_attendance_id and access_blocked=true;
-      insert into public.attendance_events(attendance_id,person_id,event_type,occurred_at,source,metadata,created_by)
-      select a.id,a.person_id,'access_authorized',clock_timestamp(),'payment',
-        jsonb_build_object('payment_id',new.id,'receipt_number',new.receipt_number),new.validated_by
-      from public.attendance a where a.id=v_attendance_id;
-    end if;
-  end if;
-  return new;
-end;
-$$;
-drop trigger if exists sync_validated_penalty_payment_to_access on public.payments;
-create trigger sync_validated_penalty_payment_to_access
-after update of status on public.payments
-for each row execute function private.sync_validated_penalty_payment_to_access();
