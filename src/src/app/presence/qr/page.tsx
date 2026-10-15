@@ -23,6 +23,7 @@ function friendlyError(raw: string) {
     ACTIVE_STUDENT_REQUIRED: "Ce compte n’est pas un compte apprenant actif autorisé au pointage.",
     OPERATING_DAY_CLOSED: "Le pointage n’est pas ouvert aujourd’hui. Adressez-vous au secrétariat.",
     STUDENT_CHECKIN_CLOSED: "La période de pointage est fermée.",
+    CHECKIN_WINDOW_CLOSED: "La séance est terminée. Présentez-vous au secrétariat si vous devez régulariser votre situation.",
     NO_TRAINING_SESSION_SCHEDULED_TODAY: "Aucune séance correspondant à votre formation n’est programmée aujourd’hui.",
     QR_CHECKIN_RATE_LIMIT: "Trop de demandes de pointage. Présentez-vous directement au secrétariat.",
     ATTENDANCE_ALREADY_RECORDED: "Votre présence est déjà enregistrée pour cette séance.",
