@@ -12,7 +12,8 @@ export default function QrPosterPage() {
   const [targetUrl, setTargetUrl] = useState("");
   const [authorized, setAuthorized] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
-  const [qrReady, setQrReady] = useState(false);\n  const [qrFailed, setQrFailed] = useState(false);
+  const [qrReady, setQrReady] = useState(false);
+  const [qrFailed, setQrFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
