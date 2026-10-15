@@ -254,6 +254,10 @@ export default function PresenceKioskPage() {
             <p style={{ margin: "5px 0 0", color: "#52647a" }}>Ordinateur du centre · tablette compatible</p>
           </div>
         </header>
+        <nav style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8, marginBottom: 18 }}>
+          <a href="/presence/qr-affiche" style={navLinkStyle}>QR officiel à imprimer</a>
+          <a href="/presence/secretariat" style={navLinkStyle}>File du secrétariat</a>
+        </nav>
 
         {loading ? <p role="status">Vérification de la session…</p> : null}
 
@@ -326,3 +330,5 @@ const primaryButton: React.CSSProperties = { width: "100%", border: 0, borderRad
 const secondaryButton: React.CSSProperties = { width: "100%", border: "1px solid #c7d4e4", borderRadius: 10, padding: "12px 16px", background: "#fff", color: "#243b53", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 8 };
 const labelStyle: React.CSSProperties = { display: "grid", gap: 6, fontSize: 14, fontWeight: 700 };
 const inputStyle: React.CSSProperties = { width: "100%", padding: "12px 13px", borderRadius: 9, border: "1px solid #c7d4e4", fontSize: 16, boxSizing: "border-box" };
+
+const navLinkStyle: React.CSSProperties = { display: "block", textAlign: "center", padding: "10px 12px", borderRadius: 9, border: "1px solid #c7d4e4", color: "#174ea6", fontSize: 13, fontWeight: 700, textDecoration: "none" };
