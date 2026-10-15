@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+);
 
 export default function QrPosterPage() {
   const [targetUrl, setTargetUrl] = useState("");
@@ -10,6 +16,17 @@ export default function QrPosterPage() {
   const qrImage = targetUrl
     ? "https://api.qrserver.com/v1/create-qr-code/?size=360x360&format=png&margin=12&data=" + encodeURIComponent(targetUrl)
     : "";
+
+  if (checkingAccess || !authorized) {
+    return <main style={{ minHeight: "100vh", background: "#eef2f7", color: "#15243a", padding: 24, fontFamily: "Arial,sans-serif" }}>
+      <section style={{ maxWidth: 560, margin: "8vh auto", padding: 28, borderRadius: 16, background: "#fff", border: "1px solid #d4deeb", textAlign: "center" }}>
+        <img src="/aero-service-logo.svg" alt="Logo Aéro Service" style={{ width: 90, height: 70, objectFit: "contain" }} />
+        <h1 style={{ marginBottom: 8 }}>QR officiel du centre</h1>
+        <p style={{ lineHeight: 1.6, color: "#52647a" }}>{checkingAccess ? "Vérification de vos autorisations…" : "L’impression du QR officiel est réservée à la Direction, à la pré-administration et au secrétariat. Connectez-vous avec un compte autorisé."}</p>
+        {!checkingAccess && <a href="/" style={{ display: "inline-block", marginTop: 8, color: "#174ea6", fontWeight: 700 }}>Se connecter à Aéro Service</a>}
+      </section>
+    </main>;
+  }
 
   return (
     <main style={{ minHeight: "100vh", background: "#eef2f7", color: "#15243a", padding: 24, fontFamily: "Arial,sans-serif" }}>
