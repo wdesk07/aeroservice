@@ -29,6 +29,7 @@ export default function SecretariatQrCheckinsPage() {
   const [requests, setRequests] = useState<CheckinRequest[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [paymentAction, setPaymentAction] = useState("");
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -70,6 +71,7 @@ export default function SecretariatQrCheckinsPage() {
     setBusyId(item.request_id);
     setError("");
     setNotice("");
+    setPaymentAction("");
     const { data, error: rpcError } = await supabase.rpc("review_qr_checkin_request", {
       p_request_id: item.request_id,
       p_decision: decision,
@@ -83,8 +85,15 @@ export default function SecretariatQrCheckinsPage() {
       const delay = Number(data.delay_minutes ?? 0);
       const amount = Number(data.penalty_amount_fcfa ?? 0);
       setNotice(delay > 0
-        ? "Présence confirmée. Retard : " + delay + " minute(s)." + (amount > 0 ? " Pénalité créée : " + amount.toLocaleString("fr-FR") + " FCFA. Ouvrez Comptabilité / Paiements pour enregistrer et valider le règlement." : " Aucune tranche de pénalité ne correspond à ce retard ; vérifiez le barème dans Direction / Pénalités.") + " L’accès au cours reste bloqué jusqu’à régularisation."
+        ? "Présence confirmée. Retard : " + delay + " minute(s)." + (amount > 0 ? " Pénalité créée : " + amount.toLocaleString("fr-FR") + " FCFA. Le règlement doit être validé avant l’accès au cours." : " Aucune tranche de pénalité ne correspond à ce retard ; la Direction doit vérifier le barème dans Pénalités.") + " L’accès au cours reste bloqué jusqu’à régularisation."
         : "Présence confirmée à l’heure. Aucun règlement de pénalité n’est nécessaire.");
+      if (delay > 0 && data.penalty_id && amount > 0) {
+        const params = new URLSearchParams({ module: "payments", person_id: item.person_id, penalty_id: String(data.penalty_id), amount_fcfa: String(amount) });
+        setPaymentAction("/?" + params.toString());
+      } else if (delay > 0) {
+        const params = new URLSearchParams({ module: "penalties", search: item.person_name });
+        setPaymentAction("/?" + params.toString());
+      }
     }
     setBusyId("");
     await loadRequests();
@@ -107,7 +116,7 @@ export default function SecretariatQrCheckinsPage() {
 
         {!user && <div style={warningBox}>Connectez-vous d’abord à Aéro Service avec votre compte Direction ou secrétariat, puis revenez sur cette page.</div>}
         {user && !authorized && <div style={warningBox}>Votre compte n’a pas le rôle requis pour examiner les pointages QR.</div>}
-        {notice && <div role="status" style={successBox}>{notice}</div>}
+        {notice && <div role="status" style={successBox}>{notice}{paymentAction && <div style={{ marginTop: 12 }}><a href={paymentAction} style={{ display: "inline-block", color: "#174ea6", fontWeight: 800, textDecoration: "underline" }}>{paymentAction.includes("module=payments") ? "Payer le retard — ouvrir le paiement prérempli" : "Consulter les pénalités de cet apprenant"}</a></div>}</div>}
         {error && <div role="alert" style={warningBox}>{error}</div>}
 
         {authorized && <p style={{ color: "#52647a", lineHeight: 1.55 }}>La demande QR seule ne crée pas de présence définitive. En confirmant ci-dessous, vous certifiez avoir vu l’apprenant. Le serveur crée ensuite le pointage et, si le barème le prévoit, la pénalité.</p>}
