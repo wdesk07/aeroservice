@@ -1,5 +1,45 @@
 -- Production-compatible attendance kiosk foundation.
 -- This migration targets the legacy production schema (public.attendance), not daily_attendance.
+-- Keep the production schema compatible with the Director's formation-aware penalty editor.
+alter table public.penalty_rules
+  add column if not exists formation_id uuid references public.formations(id) on delete set null,
+  add column if not exists target_scope text,
+  add column if not exists application_mode text,
+  add column if not exists applies_after_time time without time zone;
+
+update public.penalty_rules
+set target_scope = case
+  when lower(coalesce(person_type,'')) in ('all') then 'all'
+  when lower(coalesce(person_type,'')) in ('staff','personnel') then 'staff'
+  when lower(coalesce(person_type,'')) in ('teacher','enseignant') then 'teacher'
+  else 'students'
+end
+where target_scope is null;
+
+update public.penalty_rules
+set application_mode = case when lower(coalesce(penalty_type,''))='late_arrival' then 'automatic' else 'manual' end
+where application_mode is null;
+
+alter table public.penalty_rules alter column target_scope set default 'students';
+alter table public.penalty_rules alter column target_scope set not null;
+alter table public.penalty_rules alter column application_mode set default 'automatic';
+alter table public.penalty_rules alter column application_mode set not null;
+
+do $migration$
+begin
+  if not exists (select 1 from pg_constraint where conrelid='public.penalty_rules'::regclass and conname='penalty_rules_target_scope_check') then
+    alter table public.penalty_rules add constraint penalty_rules_target_scope_check check (target_scope in ('all','students','staff','teacher'));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid='public.penalty_rules'::regclass and conname='penalty_rules_application_mode_check') then
+    alter table public.penalty_rules add constraint penalty_rules_application_mode_check check (application_mode in ('automatic','manual'));
+  end if;
+end
+$migration$;
+
+-- A late-arrival rule never grants a hidden grace period.
+update public.penalty_rules set tolerance_minutes=0
+where active=true and lower(coalesce(penalty_type,''))='late_arrival';
+
 create table if not exists public.operating_days (
   business_date date primary key,
   status text not null check (status in ('open','closed')),
@@ -196,13 +236,16 @@ begin
  -- Select the configured penalty tier that matches this actual delay, including the zero-tolerance rule.
  select * into v_rule from public.penalty_rules r
  where r.active and r.penalty_type='late_arrival'
- and r.person_type in ('student','STUDENT','all','ALL')
+ and r.application_mode='automatic'
+ and r.target_scope in ('students','all')
+ and (r.formation_id=v_session.formation_id or r.formation_id is null)
  and v_raw_delay > greatest(coalesce(r.tolerance_minutes,0),0)
  and v_raw_delay >= r.min_delay_minutes
  and (r.max_delay_minutes is null or v_raw_delay <= r.max_delay_minutes)
  and (r.effective_from is null or r.effective_from<=v_now)
  and (r.effective_until is null or r.effective_until>=v_now)
- order by r.priority asc, r.min_delay_minutes desc, r.created_at desc limit 1;
+ order by (r.formation_id is not null) desc, r.priority asc, r.min_delay_minutes desc, r.created_at desc
+ limit 1;
  v_has_rule := found;
  v_delay := v_raw_delay;
  insert into public.attendance(session_id,person_id,person_type,status,planned_at,arrived_at,delay_minutes,access_blocked,source,latitude,longitude,location_accuracy_m)
