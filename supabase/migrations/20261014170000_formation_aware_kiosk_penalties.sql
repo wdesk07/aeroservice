@@ -85,13 +85,14 @@ begin
    cut:=coalesce(pr.applies_after_time,
      (cs.planned_start + make_interval(mins=>coalesce(pr.tolerance_minutes,0)))::time);
  else
-   cut:=(cs.planned_start+interval '15 minutes')::time;
+   -- No configured automatic rule means no grace period; never silently restore a 15-minute tolerance.
+   cut:=cs.planned_start::time;
  end if;
 
  if loc::time>=time '19:00' then raise exception 'STUDENT_CHECKIN_CLOSED'; end if;
  stat:=case when loc::time<=cut then 'on_time' else 'late' end;
  mins:=case when stat='on_time' then 0
-            else greatest(0,floor(extract(epoch from(loc::time-cut))/60)::integer) end;
+            else greatest(1,ceil(extract(epoch from(loc::time-cut))/60)::integer) end;
  insert into public.daily_attendance(
    person_id,local_date,person_type,nominal_time,cutoff_time,arrived_at,status,
    minutes_after_cutoff,checkpoint_id,latitude,longitude,location_accuracy_m
