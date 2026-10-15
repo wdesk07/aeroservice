@@ -172,16 +172,9 @@ export default function PresenceKioskPage() {
       if (sessionError || !sessionData.user) throw new Error("Connexion impossible.");
       const signedInUser = sessionData.user;
 
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("status").eq("id", signedInUser.id).maybeSingle();
-      const { data: rolesData } = await supabase.from("user_roles").select("roles(code)").eq("user_id", signedInUser.id);
-      const roleCodes = (rolesData ?? []).flatMap((entry: any) =>
-        Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
-      ).map((code: string) => code.toUpperCase());
-
-      if (profileError || String(profile?.status ?? "").trim().toLowerCase() !== "active" || roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code))) {
-        await supabase.auth.signOut();
-        throw new Error("Ce compte n’est pas autorisé à pointer comme apprenant actif.");
-      }
+      // kiosk-auth has already validated the active profile and learner role using the
+      // service-side database client. Do not repeat this check through browser queries:
+      // RLS may correctly hide profiles/user_roles from the client and falsely reject a valid learner.
 
       setUser(signedInUser);
       setPassword("");
