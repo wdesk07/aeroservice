@@ -33,7 +33,7 @@ begin
   if not exists (select 1 from pg_constraint where conrelid='public.penalty_rules'::regclass and conname='penalty_rules_application_mode_check') then
     alter table public.penalty_rules add constraint penalty_rules_application_mode_check check (application_mode in ('automatic','manual'));
   end if;
-end
+end;
 $migration$;
 
 -- A late-arrival rule never grants a hidden grace period.
