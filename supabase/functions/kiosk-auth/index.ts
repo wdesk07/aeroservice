@@ -58,8 +58,8 @@ Deno.serve(async (req) => {
       }
 
       // Also support an exact email username (the part before @), but only when it is unique.
-      if (!resolvedEmail && /^[a-zA-Z0-9._%+-]+$/.test(identifier)) {
-        const escapedIdentifier = identifier.split("").map((character) => ["\", "%", "_"].includes(character) ? "\" + character : character).join("");
+      if (!resolvedEmail && /^[a-zA-Z0-9.+-]+$/.test(identifier)) {
+        const escapedIdentifier = identifier;
         const { data: emailCandidates, error: emailLookupError } = await admin.from("profiles")
           .select("email").ilike("email", `${escapedIdentifier}@%`).limit(2);
         if (!emailLookupError && emailCandidates?.length === 1 &&
