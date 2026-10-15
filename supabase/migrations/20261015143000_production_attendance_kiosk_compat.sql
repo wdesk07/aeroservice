@@ -268,3 +268,30 @@ end;
 $$;
 revoke all on function public.review_absence_justification(uuid,text,text) from public, anon;
 grant execute on function public.review_absence_justification(uuid,text,text) to authenticated;
+
+
+create or replace function public.list_absence_justifications()
+returns setof public.absence_justifications
+language sql stable security definer set search_path = ''
+as $$
+ select j.* from public.absence_justifications j
+ where j.person_id=auth.uid()
+    or public.kiosk_actor_has_role(array['DIRECTOR','ADMIN','PRE_ADMIN','SECRETARIAT','SECRETARY'])
+ order by j.submitted_at desc
+ limit 300;
+$$;
+revoke all on function public.list_absence_justifications() from public, anon;
+grant execute on function public.list_absence_justifications() to authenticated;
+
+create or replace function public.list_my_absence_candidates()
+returns table(id uuid, session_id uuid, planned_at timestamptz, status text)
+language sql stable security definer set search_path = ''
+as $$
+ select a.id,a.session_id,a.planned_at,a.status
+ from public.attendance a
+ where a.person_id=auth.uid() and lower(a.status) in ('absent','absence','missing')
+ order by a.planned_at desc nulls last
+ limit 100;
+$$;
+revoke all on function public.list_my_absence_candidates() from public, anon;
+grant execute on function public.list_my_absence_candidates() to authenticated;
