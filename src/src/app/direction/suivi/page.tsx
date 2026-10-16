@@ -20,6 +20,7 @@ type Attendance = {
   minutes_after_cutoff: number;
 };
 type Profile = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; email: string | null; status?: string | null };
+type SessionAttendance = { id: string; person_id: string; display_name: string | null; first_name: string | null; last_name: string | null; student_number: string | null; session_id: string; session_date: string; formation_name: string | null; planned_start: string; planned_end: string; status: string; arrived_at: string | null; nominal_time: string; cutoff_time: string; minutes_after_cutoff: number; daily_attendance_id: string | null };
 
 const directorRoles = ["DIRECTOR", "ADMIN", "PRE_ADMIN"];
 
@@ -45,6 +46,7 @@ export default function DirectionSuiviPage() {
   const [ready, setReady] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [rows, setRows] = useState<Attendance[]>([]);
+  const [sessionRows, setSessionRows] = useState<SessionAttendance[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [period, setPeriod] = useState<"day" | "week">("day");
   const [day, setDay] = useState(localDateString(new Date()));
@@ -72,9 +74,25 @@ export default function DirectionSuiviPage() {
     }
     const start = localDateString(startDate);
     const end = localDateString(endDate);
-    const { data, error: attendanceError } = await supabase.from("daily_attendance")
-      .select("id,person_id,person_type,local_date,nominal_time,cutoff_time,arrived_at,status,minutes_after_cutoff")
-      .gte("local_date", start).lte("local_date", end).order("local_date", { ascending: false }).order("arrived_at", { ascending: false }).limit(2000);
+    // Actualise le détail par séance à partir du pointage journalier unique.
+    const refreshDates: string[] = [];
+    const cursor = new Date(`${start}T12:00:00+01:00`);
+    const last = new Date(`${end}T12:00:00+01:00`);
+    while (cursor <= last) { refreshDates.push(localDateString(cursor)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
+    for (const date of refreshDates) {
+      const { error: refreshError } = await supabase.rpc("refresh_session_attendance_for_date", { p_date: date });
+      if (refreshError) { setError("Le détail par séance n’a pas pu être actualisé : " + refreshError.message); }
+    }
+    const [{ data, error: attendanceError }, { data: perSession, error: sessionError }] = await Promise.all([
+      supabase.from("daily_attendance")
+        .select("id,person_id,person_type,local_date,nominal_time,cutoff_time,arrived_at,status,minutes_after_cutoff")
+        .gte("local_date", start).lte("local_date", end).order("local_date", { ascending: false }).order("arrived_at", { ascending: false }).limit(2000),
+      supabase.from("director_session_attendance")
+        .select("id,person_id,display_name,first_name,last_name,student_number,session_id,session_date,formation_name,planned_start,planned_end,status,arrived_at,nominal_time,cutoff_time,minutes_after_cutoff,daily_attendance_id")
+        .gte("session_date", start).lte("session_date", end).order("session_date", { ascending: false }).order("planned_start", { ascending: true }).limit(4000)
+    ]);
+    if (sessionError) setError("Le rapport général est chargé, mais le détail par séance est inaccessible : " + sessionError.message);
+    setSessionRows((perSession ?? []) as SessionAttendance[]);
     if (attendanceError) {
       setRows([]); setError("Impossible de charger les pointages. Vérifiez les autorisations de lecture de la Direction dans Supabase. " + attendanceError.message);
       setBusy(false); return;
@@ -160,6 +178,11 @@ export default function DirectionSuiviPage() {
       {ranking.length === 0 ? <p style={styles.muted}>Aucun retard enregistré sur cette période.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Rang</th><th>Nom et prénom</th><th>Catégorie</th><th>Nombre de retards</th><th>Minutes de retard cumulées</th></tr></thead><tbody>{ranking.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td><strong>{item.name}</strong></td><td>{rows.find((row) => row.person_id === item.id)?.person_type === "staff" ? "Personnel" : "Apprenant"}</td><td>{item.count}</td><td>{item.minutes} min</td></tr>)}</tbody></table></div>}
     </section>
     <section style={styles.card}>
+      <h2 style={styles.h2}>Présence et absence par séance de formation</h2>
+      <p style={styles.muted}>Un seul pointage journalier reste autorisé. Chaque séance prévue est suivie séparément : une arrivée après la fin d’un cours laisse ce cours marqué absent, même si l’apprenant pointe pour une séance plus tardive.</p>
+      {sessionRows.length === 0 ? <p style={styles.muted}>Aucune séance planifiée pour cette période, ou planning à compléter dans la base TEST.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Apprenant</th><th>Formation</th><th>Séance</th><th>Heure prévue</th><th>Pointage journalier</th><th>Statut de la séance</th></tr></thead><tbody>{sessionRows.map((row) => { const label = row.status === "present" ? "Présent" : row.status === "late" ? "En retard" : row.status === "absent" ? "Absent" : "À venir"; const badge = row.status === "present" ? styles.ontime : row.status === "late" ? styles.late : row.status === "absent" ? styles.absent : styles.pending; return <tr key={row.id}><td>{row.session_date}</td><td><strong>{fullName({ id: row.person_id, display_name: row.display_name, first_name: row.first_name, last_name: row.last_name, email: null })}</strong></td><td>{row.formation_name || "—"}</td><td>{row.planned_start?.slice(0,5)}–{row.planned_end?.slice(0,5)}</td><td>{row.nominal_time?.slice(0,5)}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...badge }}>{label}</span></td></tr>; })}</tbody></table></div>}
+    </section>
+    <section style={styles.card}>
       <h2 style={styles.h2}>Détail des pointages</h2>
       {rows.length === 0 ? <p style={styles.muted}>Aucun pointage enregistré pour cette période.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Nom et prénom</th><th>Catégorie</th><th>Heure prévue</th><th>Heure de pointage</th><th>Statut</th><th>Retard</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.local_date}</td><td><strong>{fullName(profiles[row.person_id])}</strong></td><td>{["staff", "personnel"].includes(row.person_type.toLowerCase()) ? "Personnel" : "Apprenant"}</td><td>{row.nominal_time?.slice(0, 5) || "—"}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...(["regularized", "regularized_late", "regularised", "regularised_late"].includes(row.status.toLowerCase()) ? styles.regularized : row.status.toLowerCase() === "late" ? styles.late : row.status.toLowerCase() === "absent" ? styles.absent : styles.ontime) }}>{statusLabel(row.status)}</span></td><td>{minutesLabel(row.minutes_after_cutoff)}</td></tr>)}</tbody></table></div>}
     </section>
@@ -189,5 +212,6 @@ const styles: Record<string, React.CSSProperties> = {
   absent: { background: "#fff0d8", color: "#80500a" },
   ontime: { background: "#e8f7ed", color: "#17633a" },
   regularized: { background: "#fff4cc", color: "#8a6100" },
+  pending: { background: "#edf2f7", color: "#53657c" },
   footer: { maxWidth: 1180, margin: "0 auto", color: "#63738a", fontSize: 12 }
 };
