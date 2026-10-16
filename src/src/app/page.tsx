@@ -15,7 +15,7 @@ type ModuleKey = "dashboard" | "students" | "teachers" | "formations" | "groups"
 type ModuleConfig = { key: ModuleKey; label: string; icon: string; table?: string; columns?: string[]; description: string; section: string };
 const modules: ModuleConfig[] = [
   { key: "dashboard", label: "Vue d’ensemble", icon: "⌂", description: "Les indicateurs essentiels de votre établissement.", section: "PILOTAGE" },
-  { key: "students", label: "Apprenants", icon: "♙", table: "students", columns: ["student_number", "formation_id", "group_id", "enrollment_date", "education_level"], description: "Suivi des apprenants et de leurs parcours.", section: "PÉDAGOGIE" },
+  { key: "students", label: "Apprenants", icon: "♙", table: "students", columns: ["first_name", "last_name", "display_name", "email", "student_number", "formation_id", "group_id", "enrollment_date", "education_level", "profile_status"], description: "Suivi des apprenants et de leurs parcours.", section: "PÉDAGOGIE" },
   { key: "teachers", label: "Formateurs", icon: "♧", table: "teachers", columns: ["id", "teacher_number", "specialization", "hire_date", "status"], description: "Équipe pédagogique et affectations.", section: "PÉDAGOGIE" },
   { key: "formations", label: "Formations", icon: "✈", table: "formations", columns: ["code", "name", "duration", "status", "created_at"], description: "Catalogue des formations proposées.", section: "PÉDAGOGIE" },
   { key: "groups", label: "Groupes", icon: "▦", table: "groups", columns: ["code", "name", "academic_year", "capacity", "status"], description: "Organisation des groupes et promotions.", section: "PÉDAGOGIE" },
@@ -26,8 +26,8 @@ const modules: ModuleConfig[] = [
   { key: "justifications", label: "Justifications d’absence", icon: "▤", table: "absence_justifications", columns: ["attendance_id", "person_id", "reason_type", "reason", "submitted_at", "status", "review_comment"], description: "Soumettre et examiner les justificatifs d’absence.", section: "ADMINISTRATION" },
   { key: "penalties", label: "Pénalités", icon: "⚠", table: "penalties", columns: ["id", "person_id", "penalty_type", "description", "amount_fcfa", "status", "created_at"], description: "Créer et suivre les pénalités, avec leur motif et leur montant.", section: "ADMINISTRATION" },
   { key: "payments", label: "Paiements", icon: "₣", table: "payments", columns: ["id", "payment_type", "payment_category", "penalty_id", "person_id", "payer_name", "payer_phone", "payer_identifier", "payment_description", "amount_fcfa", "method", "provider", "transaction_reference", "status", "received_at", "receipt_number"], description: "Paiements ordinaires et règlement des pénalités.", section: "FINANCES" },
-  { key: "staff", label: "Personnel", icon: "♙", table: "staff", columns: ["id", "staff_number", "department", "position", "hire_date", "status"], description: "Personnel administratif et opérationnel.", section: "ADMINISTRATION" },
-  { key: "roles", label: "Rôles & accès", icon: "⚿", table: "roles", columns: ["code", "name", "description", "is_system"], description: "Rôles disponibles dans la plateforme.", section: "SYSTÈME" },
+  { key: "staff", label: "Personnel", icon: "♙", table: "staff", columns: ["first_name", "last_name", "display_name", "email", "role_code", "staff_number", "department", "position", "hire_date", "staff_status"], description: "Personnel administratif et opérationnel.", section: "ADMINISTRATION" },
+  { key: "roles", label: "Rôles & accès", icon: "⚿", table: "roles", columns: ["id", "code", "name"], description: "Rôles disponibles dans la plateforme.", section: "SYSTÈME" },
   { key: "settings", label: "Paramètres", icon: "⚙", description: "Profil et préférences de session.", section: "SYSTÈME" }
 ];
 const metrics = [
