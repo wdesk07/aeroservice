@@ -356,8 +356,11 @@ export default function PresenceKioskPage() {
 
         {message && <p role="status" style={{ marginTop: 16, padding: 13, borderRadius: 10, background: message.includes("impossible") || message.includes("incorrects") || message.includes("n’est pas") ? "#fff0f0" : "#eaf7ef", color: message.includes("impossible") || message.includes("incorrects") || message.includes("n’est pas") ? "#8f2020" : "#17663b", lineHeight: 1.5 }}>{message}</p>}
         {result && (
-          <div role="status" style={{ marginTop: 12, padding: 14, borderRadius: 12, background: result.duplicate ? "#fff7e6" : result.status === "late" ? "#fff0f0" : "#eaf7ef", lineHeight: 1.5 }}>
-            <strong>{result.duplicate ? "Présence déjà enregistrée" : "Présence enregistrée"}</strong>
+          <div role="status" style={{ marginTop: 12, padding: 22, borderRadius: 14, border: "2px solid", borderColor: result.duplicate ? "#b7791f" : result.status === "late" ? "#c62828" : "#21834a", background: result.duplicate ? "#fff7e6" : result.status === "late" ? "#fff0f0" : "#eaf7ef", color: result.duplicate ? "#80500a" : result.status === "late" ? "#9a1717" : "#17633a", textAlign: "center", lineHeight: 1.5 }}>
+            <div style={{fontSize:13,fontWeight:800,letterSpacing:1,marginBottom:8}}>RÉSULTAT DU POINTAGE</div>
+            <strong style={{display:"block",fontSize:30,lineHeight:1.2,marginBottom:10}}>{result.duplicate ? "PRÉSENCE DÉJÀ ENREGISTRÉE" : result.status === "late" ? "EN RETARD — PÉNALITÉ À RÉGLER" : "À L’HEURE — ACCÈS AUTORISÉ"}</strong>
+            <div style={{fontSize:20,fontWeight:700,marginBottom:10}}>{result.person_name || result.full_name || user?.email || "Apprenant"}</div>
+            <div style={{fontSize:16}}>{result.duplicate ? "Votre présence avait déjà été enregistrée aujourd’hui." : result.status === "late" ? "Présentez-vous au secrétariat pour régler la pénalité avant l’accès au cours." : "Votre présence est confirmée. Bonne formation !"}</div>
             <p style={{ margin: "6px 0" }}>Statut : {result.status === "late" ? "En retard" : "À l’heure"}</p>
             {timestamp && <p style={{ margin: "6px 0" }}>Heure officielle : {timestamp}</p>}
           </div>
