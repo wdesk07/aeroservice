@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
   if (authError || !authData.user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
 
-  const { error } = await supabase.rpc("close_aero_center");
+  const { data, error } = await supabase.rpc("close_aero_center");
   if (error) return NextResponse.json({ error: error.message }, { status: 403 });
 
   return NextResponse.json(data ?? { ok: true, closed: true }, { headers: { "Cache-Control": "no-store" } });
