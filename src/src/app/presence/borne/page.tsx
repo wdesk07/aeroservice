@@ -44,6 +44,7 @@ export default function PresenceKioskPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [canManageOperatingDay, setCanManageOperatingDay] = useState(false);
   const [canConfigureLocation, setCanConfigureLocation] = useState(false);
   const [deviceRegistered, setDeviceRegistered] = useState(false);
   const [operatingDayStatus, setOperatingDayStatus] = useState<"open" | "closed" | "not_opened" | "unknown">("unknown");
@@ -65,6 +66,7 @@ export default function PresenceKioskPage() {
       setUser(nextUser);
       if (!nextUser) {
         setIsAdmin(false);
+        setCanManageOperatingDay(false);
         setCanConfigureLocation(false);
         setLoading(false);
         return;
@@ -74,7 +76,8 @@ export default function PresenceKioskPage() {
         Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
       ).map((code: string) => code.toUpperCase());
       if (alive) {
-        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"].includes(code)));
+        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"].includes(code)));
+        setCanManageOperatingDay(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"].includes(code)));
         setCanConfigureLocation(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code)));
         setLoading(false);
       }
