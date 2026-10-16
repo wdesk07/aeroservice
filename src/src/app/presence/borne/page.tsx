@@ -44,6 +44,7 @@ export default function PresenceKioskPage() {
   const [isDirector, setIsDirector] = useState(false);
   const [auditRows, setAuditRows] = useState<any[]>([]);
   const [deviceRegistered, setDeviceRegistered] = useState(false);
+  const [kioskAvailable, setKioskAvailable] = useState(false);
   const [operatingDayStatus, setOperatingDayStatus] = useState<"open" | "closed" | "not_opened" | "unknown">("unknown");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -54,8 +55,8 @@ export default function PresenceKioskPage() {
   useEffect(() => {
     fetch("/api/presence/kiosk-status", { cache: "no-store" })
       .then((response) => response.json())
-      .then((payload) => { setDeviceRegistered(Boolean(payload.activated)); setOperatingDayStatus(["open","closed","not_opened"].includes(payload.dayStatus) ? payload.dayStatus : "unknown"); })
-      .catch(() => setDeviceRegistered(false));
+      .then((payload) => { setDeviceRegistered(Boolean(payload.registered ?? payload.activated)); setKioskAvailable(Boolean(payload.activeNow)); setOperatingDayStatus(["open","closed","not_opened"].includes(payload.dayStatus) ? payload.dayStatus : "unknown"); })
+      .catch(() => { setDeviceRegistered(false); setKioskAvailable(false); });
 
     let alive = true;
     async function refreshIdentity(nextUser: User | null) {
@@ -182,6 +183,7 @@ export default function PresenceKioskPage() {
     setResult(null);
     try {
       if (!deviceRegistered) throw new Error("KIOSK_NOT_REGISTERED");
+      if (!kioskAvailable) throw new Error("STUDENT_CHECKIN_CLOSED");
       const { data: authPayload, error: authError } = await supabase.functions.invoke("kiosk-auth", {
         body: { identifier: identifier.trim(), password }
       });
@@ -225,7 +227,7 @@ export default function PresenceKioskPage() {
   }
 
   async function recordPresence() {
-    if (!deviceRegistered || !user) {
+    if (!deviceRegistered || !kioskAvailable || !user) {
       setMessage("La borne doit être activée et l’apprenant doit être connecté.");
       return;
     }
@@ -319,6 +321,8 @@ export default function PresenceKioskPage() {
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage apprenant</h2>
             {!deviceRegistered ? (
               <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Connectez-vous avec un compte Direction, PRE_ADMIN ou secrétariat autorisé sur la plateforme, puis ouvrez cette page pour enregistrer l’appareil.</p>
+            ) : !kioskAvailable ? (
+              <p role="status" style={{ color: "#8f2020", lineHeight: 1.5 }}>Le pointage apprenant est fermé. La borne devient disponible automatiquement de 08 h 30 à 19 h 00, heure du Bénin. L’ouverture ou la fermeture administrative du centre ne change pas cet horaire.</p>
             ) : (
               <>
                 <p style={{ color: "#52647a", lineHeight: 1.5 }}>Présentez-vous à la borne officielle. Le pointage personnel depuis un téléphone n’est pas autorisé. Le GPS est un contrôle complémentaire quand il est disponible.</p>
@@ -341,7 +345,7 @@ export default function PresenceKioskPage() {
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Confirmer votre présence</h2>
             <p style={{ lineHeight: 1.5 }}>Connecté : <strong>{user.email || "compte apprenant"}</strong></p>
             <p style={{ color: "#52647a", lineHeight: 1.5 }}>Le serveur vérifiera votre compte apprenant, la borne autorisée, l’horaire et l’absence de doublon.</p>
-            <button type="button" onClick={() => void recordPresence()} disabled={busy || !deviceRegistered} style={primaryButton}>{busy ? "Vérification…" : "Je suis présent — valider"}</button>
+            <button type="button" onClick={() => void recordPresence()} disabled={busy || !deviceRegistered || !kioskAvailable} style={primaryButton}>{busy ? "Vérification…" : "Je suis présent — valider"}</button>
             <button type="button" onClick={() => void signOut()} disabled={busy} style={secondaryButton}>Ce n’est pas mon compte / Annuler</button>
           </div>
         )}
