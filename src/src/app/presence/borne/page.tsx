@@ -22,9 +22,9 @@ function errorMessage(raw: string) {
     AUTH_REQUIRED: "La session a expiré. Reconnectez-vous sur la borne.",
     KIOSK_NOT_REGISTERED: "Cette borne n’est pas activée. Demandez à la Direction de l’enregistrer.",
     KIOSK_ADMIN_REQUIRED: "Seuls la Direction, la pré-administration ou le secrétariat autorisé peuvent ouvrir ou fermer la journée et gérer la borne.",
-    OPERATING_DAY_CLOSED: "La journée est fermée. La Direction doit ouvrir la journée et activer la borne.",
-    OPERATING_DAY_ALREADY_CLOSED: "La journée est déjà fermée. La borne ne peut plus être activée aujourd’hui.",
-    OPERATING_DAY_NOT_OPEN: "Aucune journée ouverte à fermer. Ouvrez d’abord la journée et activez la borne.",
+    OPERATING_DAY_CLOSED: "La borne est hors de sa plage horaire (08 h 30 à 19 h 00).",
+    OPERATING_DAY_ALREADY_CLOSED: "La journée du centre est déjà fermée.",
+    OPERATING_DAY_NOT_OPEN: "Aucune journée du centre n’est actuellement ouverte.",
     INVALID_CREDENTIALS: "Identifiant ou mot de passe incorrect, ou compte apprenant non autorisé.",
     TOO_MANY_ATTEMPTS: "Trop de tentatives. Attendez quinze minutes avant de réessayer.",
     SERVICE_UNAVAILABLE: "Le service de connexion est temporairement indisponible. Réessayez plus tard.",
@@ -69,7 +69,7 @@ export default function PresenceKioskPage() {
         Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
       ).map((code: string) => code.toUpperCase());
       if (alive) {
-        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY"].includes(code)));
+        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"].includes(code)));
         setLoading(false);
       }
     }
@@ -99,12 +99,42 @@ export default function PresenceKioskPage() {
       if (!response.ok || !payload?.activated) throw new Error(payload?.error || "KIOSK_ACTIVATION_FAILED");
       setDeviceRegistered(true);
       setOperatingDayStatus("open");
-      setMessage("Journée ouverte et borne activée. Le jeton est conservé dans un cookie sécurisé inaccessible au JavaScript.");
+      setMessage("Borne enregistrée. Elle est disponible automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture du centre.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Activation impossible."));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function openCenter() {
+    setBusy(true); setMessage("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/presence/center-open", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "CENTER_OPEN_FAILED");
+      setOperatingDayStatus("open");
+      setMessage("Ouverture d’Aéro Service enregistrée dans l’audit de la Direction. La borne reste indépendante.");
+    } catch (error) { setMessage(errorMessage(error instanceof Error ? error.message : "Ouverture impossible.")); }
+    finally { setBusy(false); }
+  }
+
+  async function closeCenter() {
+    setBusy(true); setMessage("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/presence/center-close", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "CENTER_CLOSE_FAILED");
+      setOperatingDayStatus("closed");
+      setMessage("Fermeture d’Aéro Service enregistrée dans l’audit de la Direction. La borne reste indépendante.");
+    } catch (error) { setMessage(errorMessage(error instanceof Error ? error.message : "Fermeture impossible.")); }
+    finally { setBusy(false); }
   }
 
   async function revokeKiosk() {
@@ -122,7 +152,7 @@ export default function PresenceKioskPage() {
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "KIOSK_REVOKE_FAILED");
       setDeviceRegistered(false);
       setOperatingDayStatus("closed");
-      setMessage("Journée fermée. Les jetons actifs de borne sont révoqués et aucun nouveau pointage ne sera accepté.");
+      setMessage("L’activité du centre a été fermée. La borne reste indépendante et suit ses horaires automatiques de 08 h 30 à 19 h 00.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Révocation impossible."));
     } finally {
@@ -259,18 +289,20 @@ export default function PresenceKioskPage() {
 
         {!loading && user && isAdmin && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-            <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
-            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction, à la pré-administration et au secrétariat autorisé. La secrétaire peut ouvrir la journée, créer le jeton et activer la borne, puis fermer la journée en fin de service. Cela ne lui donne pas les autres droits de Direction. La fermeture révoque les jetons actifs.</p>
+            <h2 style={{ marginTop: 0, fontSize: 18 }}>Borne et opérations du centre</h2>
+            <p style={{ lineHeight: 1.5, color: "#52647a" }}>La borne de présence fonctionne automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative du centre. Les commandes ci-dessous servent uniquement à enregistrer l’ouverture et la fermeture d’Aéro Service. Elles ne désactivent pas la borne.</p>
             {deviceRegistered ? (
               <>
-                <p style={{ color: "#17663b", fontWeight: 700 }}>Cette session possède déjà un jeton de borne.</p>
-                <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Terminer la configuration et ouvrir le pointage apprenant</button>
-                <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Fermer la journée et révoquer la borne</button>
+                <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée sur cet ordinateur.</p>
+                <p style={{ lineHeight: 1.5 }}>État administratif du centre aujourd’hui : <strong>{operatingDayStatus === "open" ? "Ouvert" : operatingDayStatus === "closed" ? "Fermé" : "Pas encore ouvert"}</strong></p>
+                {operatingDayStatus !== "open" ? <button type="button" onClick={() => void openCenter()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Ouvrir Aéro Service"}</button> : <button type="button" onClick={() => void closeCenter()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Fermer Aéro Service"}</button>}
+                <button type="button" onClick={() => void signOut()} disabled={busy} style={secondaryButton}>Terminer et revenir au pointage apprenant</button>
               </>
-            ) : operatingDayStatus === "closed" ? (
-              <p role="status" style={{ color: "#8f2020", lineHeight: 1.5 }}>La journée est déjà fermée. Les jetons de borne sont révoqués; une nouvelle ouverture sera possible le prochain jour ouvrable.</p>
             ) : (
-              <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Ouverture en cours…" : "Ouvrir la journée et activer cette borne"}</button>
+              <>
+                <p style={{ lineHeight: 1.5 }}>Première configuration seulement : enregistrez cette borne une fois. Cela n’ouvre ni ne ferme le centre.</p>
+                <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Enregistrer cette borne"}</button>
+              </>
             )}
           </div>
         )}
