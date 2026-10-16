@@ -464,28 +464,48 @@ export default function Home() {
     e.preventDefault();
     if (!canCreateStaffAccount) { setError("Seul le secrétariat ou la direction peut créer un compte."); return; }
     setBusy(true); setError(""); setNotice("");
-    const { data, error: accountError } = await supabase.functions.invoke("secretariat-create-account", {
-      body: { display_name: newAccount.display_name.trim(), email: newAccount.email.trim(), password: newAccount.password, phone: newAccount.phone.trim(), role_code: newAccount.role_code, formation_id: newAccount.formation_id || undefined }
-    });
-    if (accountError || data?.error || !data?.user_id) {
-      setError(data?.error || accountError?.message || "Impossible de créer le compte.");
+    try {
+      // Refresh the authenticated session before calling the protected Edge Function.
+      // This avoids stale/expired access tokens causing the generic non-2xx error.
+      let { data: sessionData } = await supabase.auth.getSession();
+      let session = sessionData.session;
+      if (session?.refresh_token) {
+        const refreshed = await supabase.auth.refreshSession();
+        if (!refreshed.error && refreshed.data.session) session = refreshed.data.session;
+      }
+      if (!session?.access_token) {
+        setError("Votre session a expiré. Reconnectez-vous, puis recommencez l’inscription.");
+        return;
+      }
+      const requestedRole = newAccount.role_code;
+      const { data, error: accountError } = await supabase.functions.invoke("secretariat-create-account", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { display_name: newAccount.display_name.trim(), email: newAccount.email.trim(), password: newAccount.password, phone: newAccount.phone.trim(), role_code: requestedRole, formation_id: newAccount.formation_id || undefined }
+      });
+      if (accountError || data?.error || !data?.user_id) {
+        const detail = data?.detail ? ` — ${data.detail}` : "";
+        const message = data?.error ? `${data.error}${detail}` : accountError?.message || "Impossible de créer le compte.";
+        setError(message.includes("401") || message.includes("AUTH_REQUIRED")
+          ? "Votre session a expiré ou n’est plus valide. Reconnectez-vous puis recommencez l’inscription."
+          : message);
+        return;
+      }
+      const parts = newAccount.display_name.trim().split(/\\s+/);
+      const createdProfile = { id: data.user_id, display_name: newAccount.display_name.trim(), first_name: parts.slice(0, -1).join(" ") || newAccount.display_name.trim(), last_name: parts.length > 1 ? parts[parts.length - 1] : "", public_id: null };
+      setProfileOptions(current => [createdProfile, ...current.filter(item => item.id !== data.user_id)]);
+      if (requestedRole === "STUDENT") {
+        setCreateValues(current => ({ ...current, person_id: data.user_id, formation_id: newAccount.formation_id || current.formation_id || "", registration_date: current.registration_date || new Date().toISOString().slice(0, 10), status: current.status || "pending", registration_number: current.registration_number || ("AS-" + new Date().getFullYear() + "-" + data.user_id.replace(/-/g, "").slice(0, 8).toUpperCase()) }));
+        setNotice("Compte apprenant créé. Ses identifiants sont prêts : notez l’adresse e-mail et le mot de passe saisis, puis terminez l’inscription ci-dessous.");
+      } else {
+        setNotice("Compte créé et rôle attribué : " + requestedRole + ". L’utilisateur peut maintenant se connecter avec les identifiants créés.");
+      }
+      setNewAccount({ display_name: "", email: "", password: "", phone: "", role_code: "STUDENT", formation_id: "" });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Une erreur inattendue empêche la création du compte.");
+    } finally {
       setBusy(false);
-      return;
     }
-    const parts = newAccount.display_name.trim().split(/\s+/);
-    const createdProfile = { id: data.user_id, display_name: newAccount.display_name.trim(), first_name: parts.slice(0, -1).join(" ") || newAccount.display_name.trim(), last_name: parts.length > 1 ? parts[parts.length - 1] : "", public_id: null };
-    setProfileOptions(current => [createdProfile, ...current.filter(item => item.id !== data.user_id)]);
-    if (data.role_code === "STUDENT") {
-      setCreateValues(current => ({ ...current, person_id: data.user_id, formation_id: newAccount.formation_id || current.formation_id || "", registration_date: current.registration_date || new Date().toISOString().slice(0, 10), status: current.status || "pending", registration_number: current.registration_number || ("AS-" + new Date().getFullYear() + "-" + data.user_id.replace(/-/g, "").slice(0, 8).toUpperCase()) }));
-      setNotice("Compte apprenant créé. Ses identifiants sont prêts : notez l’adresse e-mail et le mot de passe saisis, puis terminez l’inscription ci-dessous.");
-      setNewAccount({ display_name: "", email: "", password: "", phone: "", role_code: "STUDENT", formation_id: "" });
-    } else {
-      setNotice("Compte créé et rôle attribué : " + data.role_code + ". L’utilisateur peut maintenant se connecter avec les identifiants créés.");
-      setNewAccount({ display_name: "", email: "", password: "", phone: "", role_code: "STUDENT", formation_id: "" });
-    }
-    setBusy(false);
   }
-
   async function createModuleRecord(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const canRecordPayment = roles.some(role => ["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
