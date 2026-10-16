@@ -113,7 +113,7 @@ export default function PresenceKioskPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("AUTH_REQUIRED");
-      const response = await fetch("/api/presence/center-open", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
+      const response = await fetch("/api/presence/kiosk-activate", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "CENTER_OPEN_FAILED");
       setOperatingDayStatus("open");
@@ -128,7 +128,7 @@ export default function PresenceKioskPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("AUTH_REQUIRED");
-      const response = await fetch("/api/presence/center-close", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
+      const response = await fetch("/api/presence/kiosk-revoke", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "CENTER_CLOSE_FAILED");
       setOperatingDayStatus("closed");
