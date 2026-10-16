@@ -361,7 +361,15 @@ export default function PresenceKioskPage() {
               <>
                 <h2 style={{ marginTop: 0, fontSize: 18 }}>Ouverture de la journée — personnel autorisé</h2>
                 <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Un membre du personnel doit d’abord se connecter à son espace, puis revenir ici pour ouvrir la journée.</p>
-                <a href="/login?next=%2Fpresence%2Fborne" style={{ ...navLinkStyle, marginTop: 10 }}>Connexion du personnel autorisé</a>
+                <form onSubmit={loginStaff} style={{ display: "grid", gap: 12, marginTop: 12 }}>
+                  <label style={labelStyle}>E-mail professionnel
+                    <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="Votre e-mail professionnel" />
+                  </label>
+                  <label style={labelStyle}>Mot de passe
+                    <input autoComplete="current-password" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} style={inputStyle} />
+                  </label>
+                  <button type="submit" disabled={busy} style={primaryButton}>{busy ? "Vérification…" : "Se connecter pour ouvrir la journée"}</button>
+                </form>
               </>
             ) : (
               <>
