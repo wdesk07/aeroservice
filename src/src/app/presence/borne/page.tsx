@@ -312,6 +312,8 @@ export default function PresenceKioskPage() {
           </div>
         )}
 
+        {!loading && user && isDirector && <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}><h2 style={{ fontSize: 18 }}>Audit des ouvertures et fermetures</h2>{auditRows.length === 0 ? <p>Aucune opération enregistrée.</p> : auditRows.map((row: any) => <p key={row.id}>{row.action === "opened" ? "Ouverture" : "Fermeture"} — {row.business_date} — {row.actor_email || "Agent autorisé"} — {new Date(row.occurred_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })}</p>)}</div>}
+
         {!loading && !user && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage apprenant</h2>
