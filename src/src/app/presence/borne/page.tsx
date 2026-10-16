@@ -15,6 +15,8 @@ type AttendanceResult = {
   arrived_at?: string;
   minutes_after_cutoff?: number;
   checkpoint?: string;
+  person_name?: string;
+  full_name?: string;
 };
 
 function errorMessage(raw: string) {
