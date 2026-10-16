@@ -346,8 +346,6 @@ export default function PresenceKioskPage() {
                 <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Se déconnecter et laisser la borne disponible</button>
                 <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Enregistrer la fermeture d’Aéro Service</button>
               </>
-            ) : operatingDayStatus === "closed" ? (
-              <p role="status" style={{ color: "#8f2020", lineHeight: 1.5 }}>La fermeture administrative est déjà enregistrée aujourd’hui. La borne de pointage reste disponible selon ses horaires, de 08 h 30 à 19 h 00.</p>
             ) : (
               <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Ouverture en cours…" : "Enregistrer l’ouverture d’Aéro Service"}</button>
             )}
