@@ -17,6 +17,13 @@ export async function POST(request: Request) {
   const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
   if (authError || !authData.user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
 
+  let action = "register_kiosk";
+  try { const body = await request.clone().json(); if (body?.action === "open_center") action = "open_center"; } catch { /* first-time kiosk registration */ }
+  if (action === "open_center") {
+    const { data, error } = await supabase.rpc("open_aero_center");
+    if (error) return NextResponse.json({ error: error.message }, { status: 403 });
+    return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+  }
   const { data, error } = await supabase.rpc("activate_presence_kiosk", { p_name: "Borne officielle Aéro Service" });
   if (error) return NextResponse.json({ error: error.message }, { status: 403 });
   const result = data as { ok?: boolean; opened?: boolean; device_token?: string; device_id?: string };
