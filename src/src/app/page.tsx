@@ -483,11 +483,34 @@ export default function Home() {
         body: { display_name: newAccount.display_name.trim(), email: newAccount.email.trim(), password: newAccount.password, phone: newAccount.phone.trim(), role_code: requestedRole, formation_id: newAccount.formation_id || undefined }
       });
       if (accountError || data?.error || !data?.user_id) {
-        const detail = data?.detail ? ` — ${data.detail}` : "";
-        const message = data?.error ? `${data.error}${detail}` : accountError?.message || "Impossible de créer le compte.";
-        setError(message.includes("401") || message.includes("AUTH_REQUIRED")
-          ? "Votre session a expiré ou n’est plus valide. Reconnectez-vous puis recommencez l’inscription."
-          : message);
+        // Supabase wraps non-2xx Edge Function responses in a generic error.
+        // Read the JSON body so the secretary sees the real reason, in French.
+        let serverError: Record<string, unknown> = {};
+        const context = (accountError as any)?.context;
+        if (context && typeof context.json === "function") {
+          try { serverError = await context.json(); } catch { /* response body unavailable */ }
+        }
+        const rawError = String(data?.error || serverError.error || accountError?.message || "");
+        const detail = data?.detail || serverError.detail;
+        const rawMessage = String(detail ? `${rawError} — ${detail}` : rawError);
+        const normalized = rawMessage.toLowerCase();
+        let message = rawMessage || "Impossible de créer le compte.";
+        if (normalized.includes("email_exists") || normalized.includes("already been registered") || normalized.includes("already registered")) {
+          message = "Cette adresse e-mail possède déjà un compte Aéro Service. Utilisez une autre adresse, ou recherchez l’apprenant dans la liste avant de recommencer.";
+        } else if (normalized.includes("formation_required")) {
+          message = "Choisissez une formation pour ce compte apprenant.";
+        } else if (normalized.includes("formation_not_available")) {
+          message = "La formation choisie n’est plus active. Actualisez la page et sélectionnez une formation disponible.";
+        } else if (normalized.includes("invalid_account_details")) {
+          message = "Vérifiez le nom, l’adresse e-mail et le mot de passe (8 caractères minimum).";
+        } else if (normalized.includes("auth_required") || normalized.includes("401")) {
+          message = "Votre session a expiré ou n’est plus valide. Reconnectez-vous puis recommencez l’inscription.";
+        } else if (normalized.includes("role_not_allowed")) {
+          message = "Le rôle sélectionné n’est pas autorisé pour cette création de compte.";
+        } else if (normalized.includes("profile_create_failed") || normalized.includes("role_assignment_failed") || normalized.includes("registration_save_failed") || normalized.includes("student_record_create_failed")) {
+          message = "Le compte n’a pas pu être finalisé dans la base TEST. Détail technique : " + rawMessage;
+        }
+        setError(message);
         return;
       }
       const parts = newAccount.display_name.trim().split(/\\s+/);
