@@ -335,7 +335,11 @@ export default function PresenceKioskPage() {
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage apprenant</h2>
             {!deviceRegistered ? (
-              <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Un membre du personnel autorisé doit ouvrir la journée pour activer la borne.</p>
+              <>
+                <h2 style={{ marginTop: 0, fontSize: 18 }}>Ouverture de la journée — personnel autorisé</h2>
+                <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Un membre du personnel doit d’abord se connecter à son espace, puis revenir ici pour ouvrir la journée.</p>
+                <a href="/login?next=%2Fpresence%2Fborne" style={{ ...navLinkStyle, marginTop: 10 }}>Connexion du personnel autorisé</a>
+              </>
             ) : (
               <>
                 <p style={{ color: "#52647a", lineHeight: 1.5 }}>Présentez-vous à la borne officielle. Le pointage personnel depuis un téléphone n’est pas autorisé. Le GPS est un contrôle complémentaire quand il est disponible.</p>
