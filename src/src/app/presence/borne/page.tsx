@@ -41,6 +41,8 @@ export default function PresenceKioskPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDirector, setIsDirector] = useState(false);
+  const [auditRows, setAuditRows] = useState<any[]>([]);
   const [deviceRegistered, setDeviceRegistered] = useState(false);
   const [operatingDayStatus, setOperatingDayStatus] = useState<"open" | "closed" | "not_opened" | "unknown">("unknown");
   const [identifier, setIdentifier] = useState("");
@@ -70,6 +72,9 @@ export default function PresenceKioskPage() {
       ).map((code: string) => code.toUpperCase());
       if (alive) {
         setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"].includes(code)));
+        const directorAccess = roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code));
+        setIsDirector(directorAccess);
+        if (directorAccess) { const { data: auditData } = await supabase.rpc("get_center_operation_audit", { p_limit: 30 }); if (alive) setAuditRows(auditData ?? []); }
         setLoading(false);
       }
     }
