@@ -334,7 +334,7 @@ export default function PresenceKioskPage() {
         {!loading && user && canManageOperatingDay && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
-            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Ouverture et fermeture accessibles à tout le personnel autorisé. À 08 h 30, la borne devient disponible automatiquement, mais la journée reste fermée jusqu’à ce qu’un membre du personnel l’ouvre. Chaque ouverture et fermeture est enregistrée et signalée à la Direction. La fermeture révoque les jetons actifs.</p>
+            <p style={{ lineHeight: 1.5, color: "#52647a" }}>La borne de pointage est active automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative. Les boutons ci-dessous servent uniquement à enregistrer l’ouverture et la fermeture d’Aéro Service. Chaque action est horodatée et signalée à la Direction; la fermeture administrative ne désactive pas la borne avant 19 h 00.</p>
             {canConfigureLocation && <div style={{ border: "1px solid #dce4ef", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <strong>Zone GPS du centre</strong>
               <p style={{ margin: "6px 0 10px", color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>Placez-vous physiquement à l’entrée du centre, activez le GPS puis enregistrez sa position. La zone autorisée est réglée à 100 mètres autour de ce point.</p>
@@ -342,14 +342,14 @@ export default function PresenceKioskPage() {
             </div>}
             {deviceRegistered ? (
               <>
-                <p style={{ color: "#17663b", fontWeight: 700 }}>Cette session possède déjà un jeton de borne.</p>
-                <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Terminer la configuration et ouvrir le pointage apprenant</button>
-                <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Fermer la journée et révoquer la borne</button>
+                <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée. Le pointage est automatiquement disponible de 08 h 30 à 19 h 00.</p>
+                <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Se déconnecter et laisser la borne disponible</button>
+                <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Enregistrer la fermeture d’Aéro Service</button>
               </>
             ) : operatingDayStatus === "closed" ? (
-              <p role="status" style={{ color: "#8f2020", lineHeight: 1.5 }}>La journée est déjà fermée. Les jetons de borne sont révoqués; une nouvelle ouverture sera possible le prochain jour ouvrable.</p>
+              <p role="status" style={{ color: "#8f2020", lineHeight: 1.5 }}>La fermeture administrative est déjà enregistrée aujourd’hui. La borne de pointage reste disponible selon ses horaires, de 08 h 30 à 19 h 00.</p>
             ) : (
-              <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Ouverture en cours…" : "Ouvrir la journée et activer cette borne"}</button>
+              <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Ouverture en cours…" : "Enregistrer l’ouverture d’Aéro Service"}</button>
             )}
           </div>
         )}
