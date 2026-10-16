@@ -17,14 +17,14 @@ export async function POST(request: Request) {
   const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
   if (authError || !authData.user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
 
-  const { data, error } = await supabase.rpc("open_operating_day_and_activate_kiosk", { p_name: "Borne officielle Aéro Service" });
+  const { data, error } = await supabase.rpc("activate_presence_kiosk", { p_name: "Borne officielle Aéro Service" });
   if (error) return NextResponse.json({ error: error.message }, { status: 403 });
   const result = data as { ok?: boolean; opened?: boolean; device_token?: string; device_id?: string };
-  if (!result?.ok || !result.opened || !result.device_token || !result.device_id) {
+  if (!result?.ok || !result.device_token || !result.device_id) {
     return NextResponse.json({ error: "KIOSK_ACTIVATION_FAILED" }, { status: 500 });
   }
 
-  const response = NextResponse.json({ ok: true, activated: true, opened: true });
+  const response = NextResponse.json({ ok: true, activated: true, opened: false });
   const options = { httpOnly: true, secure: true, sameSite: "strict" as const, path: "/api/presence", maxAge: 60 * 60 * 24 * 45 };
   response.cookies.set("aero_presence_kiosk_token", result.device_token, options);
   response.cookies.set("aero_presence_kiosk_device_id", result.device_id, options);
