@@ -304,7 +304,7 @@ export default function PresenceKioskPage() {
 
         {loading ? <p role="status">Vérification de la session…</p> : null}
 
-        {!loading && user && isAdmin && (
+        {!loading && user && canManageOperatingDay && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
             <p style={{ lineHeight: 1.5, color: "#52647a" }}>Ouverture et fermeture accessibles à tout le personnel autorisé. À 08 h 30, la borne devient disponible automatiquement, mais la journée reste fermée jusqu’à ce qu’un membre du personnel l’ouvre. Chaque ouverture et fermeture est enregistrée et signalée à la Direction. La fermeture révoque les jetons actifs.</p>
