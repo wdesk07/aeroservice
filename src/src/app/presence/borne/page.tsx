@@ -71,14 +71,18 @@ export default function PresenceKioskPage() {
         setLoading(false);
         return;
       }
-      const { data } = await supabase.from("user_roles").select("roles(code)").eq("user_id", nextUser.id);
-      const roleCodes = (data ?? []).flatMap((entry: any) =>
-        Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
-      ).map((code: string) => code.toUpperCase());
+      // Use the database role-check function instead of selecting user_roles directly.
+      // Row-level security can hide the role rows from ordinary staff accounts and make
+      // the operating-day controls disappear even when the server authorizes that person.
+      const [{ data: adminAccess }, { data: operatingDayAccess }, { data: locationAccess }] = await Promise.all([
+        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
+        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"] }),
+        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN"] }),
+      ]);
       if (alive) {
-        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"].includes(code)));
-        setCanManageOperatingDay(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"].includes(code)));
-        setCanConfigureLocation(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code)));
+        setIsAdmin(adminAccess === true);
+        setCanManageOperatingDay(operatingDayAccess === true);
+        setCanConfigureLocation(locationAccess === true);
         setLoading(false);
       }
     }
