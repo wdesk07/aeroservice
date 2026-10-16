@@ -80,6 +80,8 @@ export default function DirectionSuiviPage() {
     const last = new Date(`${end}T12:00:00+01:00`);
     while (cursor <= last) { refreshDates.push(localDateString(cursor)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
     for (const date of refreshDates) {
+      const { error: materializeError } = await supabase.rpc("materialize_formation_sessions_for_date", { p_date: date });
+      if (materializeError) { setError("Le planning hebdomadaire n’a pas pu être généré : " + materializeError.message); }
       const { error: refreshError } = await supabase.rpc("refresh_session_attendance_for_date", { p_date: date });
       if (refreshError) { setError("Le détail par séance n’a pas pu être actualisé : " + refreshError.message); }
     }
