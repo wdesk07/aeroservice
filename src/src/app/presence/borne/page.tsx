@@ -74,7 +74,7 @@ export default function PresenceKioskPage() {
         Array.isArray(entry.roles) ? entry.roles.map((role: any) => role.code) : entry.roles?.code ? [entry.roles.code] : []
       ).map((code: string) => code.toUpperCase());
       if (alive) {
-        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY"].includes(code)));
+        setIsAdmin(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"].includes(code)));
         setCanConfigureLocation(roleCodes.some((code: string) => ["DIRECTOR", "ADMIN", "PRE_ADMIN"].includes(code)));
         setLoading(false);
       }
@@ -304,7 +304,7 @@ export default function PresenceKioskPage() {
         {!loading && user && isAdmin && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
-            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Réservé à la Direction, à la pré-administration et au secrétariat autorisé. La secrétaire peut ouvrir la journée, créer le jeton et activer la borne, puis fermer la journée en fin de service. Cela ne lui donne pas les autres droits de Direction. La fermeture révoque les jetons actifs.</p>
+            <p style={{ lineHeight: 1.5, color: "#52647a" }}>Ouverture et fermeture accessibles à tout le personnel autorisé. À 08 h 30, la borne devient disponible automatiquement, mais la journée reste fermée jusqu’à ce qu’un membre du personnel l’ouvre. Chaque ouverture et fermeture est enregistrée et signalée à la Direction. La fermeture révoque les jetons actifs.</p>
             {canConfigureLocation && <div style={{ border: "1px solid #dce4ef", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <strong>Zone GPS du centre</strong>
               <p style={{ margin: "6px 0 10px", color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>Placez-vous physiquement à l’entrée du centre, activez le GPS puis enregistrez sa position. La zone autorisée est réglée à 100 mètres autour de ce point.</p>
@@ -328,7 +328,7 @@ export default function PresenceKioskPage() {
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage apprenant</h2>
             {!deviceRegistered ? (
-              <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Connectez-vous avec un compte Direction, PRE_ADMIN ou secrétariat autorisé sur la plateforme, puis ouvrez cette page pour enregistrer l’appareil.</p>
+              <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Un membre du personnel autorisé doit ouvrir la journée pour activer la borne.</p>
             ) : (
               <>
                 <p style={{ color: "#52647a", lineHeight: 1.5 }}>Présentez-vous à la borne officielle. Le pointage personnel depuis un téléphone n’est pas autorisé. Le GPS est un contrôle complémentaire quand il est disponible.</p>
