@@ -161,7 +161,7 @@ export default function DirectionSuiviPage() {
     </section>
     <section style={styles.card}>
       <h2 style={styles.h2}>Détail des pointages</h2>
-      {rows.length === 0 ? <p style={styles.muted}>Aucun pointage enregistré pour cette période.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Nom et prénom</th><th>Catégorie</th><th>Heure prévue</th><th>Heure de pointage</th><th>Statut</th><th>Retard</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.local_date}</td><td><strong>{fullName(profiles[row.person_id])}</strong></td><td>{["staff", "personnel"].includes(row.person_type.toLowerCase()) ? "Personnel" : "Apprenant"}</td><td>{row.nominal_time?.slice(0, 5) || "—"}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...(row.status.toLowerCase() === "late" ? styles.late : row.status.toLowerCase() === "absent" ? styles.absent : styles.ontime) }}>{statusLabel(row.status)}</span></td><td>{minutesLabel(row.minutes_after_cutoff)}</td></tr>)}</tbody></table></div>}
+      {rows.length === 0 ? <p style={styles.muted}>Aucun pointage enregistré pour cette période.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Nom et prénom</th><th>Catégorie</th><th>Heure prévue</th><th>Heure de pointage</th><th>Statut</th><th>Retard</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.local_date}</td><td><strong>{fullName(profiles[row.person_id])}</strong></td><td>{["staff", "personnel"].includes(row.person_type.toLowerCase()) ? "Personnel" : "Apprenant"}</td><td>{row.nominal_time?.slice(0, 5) || "—"}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...(["regularized", "regularized_late", "regularised", "regularised_late"].includes(row.status.toLowerCase()) ? styles.regularized : row.status.toLowerCase() === "late" ? styles.late : row.status.toLowerCase() === "absent" ? styles.absent : styles.ontime) }}>{statusLabel(row.status)}</span></td><td>{minutesLabel(row.minutes_after_cutoff)}</td></tr>)}</tbody></table></div>}
     </section>
     <p style={styles.footer}>Aéro Service · Rapport calculé à partir des pointages présents dans la base de données.</p>
   </main>;
@@ -188,5 +188,6 @@ const styles: Record<string, React.CSSProperties> = {
   late: { background: "#fff0f0", color: "#9a2727" },
   absent: { background: "#fff0d8", color: "#80500a" },
   ontime: { background: "#e8f7ed", color: "#17633a" },
+  regularized: { background: "#fff4cc", color: "#8a6100" },
   footer: { maxWidth: 1180, margin: "0 auto", color: "#63738a", fontSize: 12 }
 };
