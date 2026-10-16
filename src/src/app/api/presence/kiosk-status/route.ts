@@ -28,9 +28,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ activated: false, dayStatus }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  const { data, error } = await supabase.rpc("is_presence_kiosk_registered", { p_device_token: token });
+  const [{ data: registered, error: registeredError }, { data: activeNow, error: activeError }] = await Promise.all([
+    supabase.rpc("is_presence_kiosk_registered", { p_device_token: token }),
+    supabase.rpc("is_presence_kiosk_active", { p_device_token: token }),
+  ]);
   return NextResponse.json(
-    { activated: !error && data === true, dayStatus },
+    { activated: !registeredError && registered === true, registered: !registeredError && registered === true, activeNow: !activeError && activeNow === true, dayStatus },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
