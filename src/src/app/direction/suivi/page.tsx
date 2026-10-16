@@ -19,7 +19,7 @@ type Attendance = {
   status: string;
   minutes_after_cutoff: number;
 };
-type Profile = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; email: string | null };
+type Profile = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; email: string | null; status?: string | null };
 
 const directorRoles = ["DIRECTOR", "ADMIN", "PRE_ADMIN"];
 
@@ -79,16 +79,41 @@ export default function DirectionSuiviPage() {
       setRows([]); setError("Impossible de charger les pointages. Vérifiez les autorisations de lecture de la Direction dans Supabase. " + attendanceError.message);
       setBusy(false); return;
     }
-    const attendance = (data ?? []) as Attendance[];
+    let attendance = (data ?? []) as Attendance[];
+    const [{ data: profileRows, error: profileError }, { data: allRoleRows, error: allRolesError }] = await Promise.all([
+      supabase.from("profiles").select("id,display_name,first_name,last_name,email,status"),
+      supabase.from("user_roles").select("user_id,roles(code)")
+    ]);
+    const map: Record<string, Profile> = {};
+    for (const p of (profileRows ?? []) as Profile[]) map[p.id] = p;
+    if (profileError || allRolesError) {
+      setError("Les pointages sont chargés, mais les noms ou la liste des personnes actives ne sont pas tous accessibles. Vérifiez les autorisations de lecture des profils et rôles.");
+    } else {
+      const roleMap = new Map<string, string[]>();
+      for (const item of (allRoleRows ?? []) as any[]) {
+        const attached = Array.isArray(item.roles) ? item.roles : item.roles ? [item.roles] : [];
+        roleMap.set(item.user_id, [...(roleMap.get(item.user_id) ?? []), ...attached.map((role: any) => String(role.code ?? "").toUpperCase())]);
+      }
+      // Pour le bilan quotidien, ajouter les comptes actifs qui n’ont aucun pointage :
+      // ils apparaissent explicitement comme absents / non pointés, sans inventer d’heure d’arrivée.
+      if (period === "day") {
+        const alreadySeen = new Set(attendance.filter((row) => row.local_date === day).map((row) => row.person_id));
+        const activePeople = (profileRows ?? []) as Profile[];
+        const missing = activePeople.filter((p) => {
+          if (alreadySeen.has(p.id) || (p.status && !["active", "approved", "validated"].includes(p.status.toLowerCase()))) return false;
+          const codes = roleMap.get(p.id) ?? [];
+          return codes.some((code) => ["STUDENT", "APPRENANT", "STAFF", "PERSONNEL", "TEACHER", "ENSEIGNANT"].includes(code));
+        });
+        const synthetic: Attendance[] = missing.map((p) => {
+          const codes = roleMap.get(p.id) ?? [];
+          const personType = codes.some((code) => ["STAFF", "PERSONNEL", "TEACHER", "ENSEIGNANT"].includes(code)) ? "staff" : "student";
+          return { id: `not-checked-${p.id}`, person_id: p.id, person_type: personType, local_date: day, nominal_time: "", cutoff_time: "", arrived_at: null, status: "absent", minutes_after_cutoff: 0 };
+        });
+        attendance = [...attendance, ...synthetic];
+      }
+    }
+    setProfiles(map);
     setRows(attendance);
-    const ids = [...new Set(attendance.map((row) => row.person_id))];
-    if (ids.length) {
-      const { data: profileRows, error: profileError } = await supabase.from("profiles").select("id,display_name,first_name,last_name,email").in("id", ids);
-      if (profileError) setError("Les pointages sont chargés, mais les noms ne sont pas tous accessibles. Vérifiez les autorisations de lecture des profils.");
-      const map: Record<string, Profile> = {};
-      for (const p of (profileRows ?? []) as Profile[]) map[p.id] = p;
-      setProfiles(map);
-    } else setProfiles({});
     setBusy(false);
   }, [day, period]);
 
