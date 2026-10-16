@@ -153,6 +153,29 @@ export default function PresenceKioskPage() {
     setMessage("Déconnexion effectuée. La borne est prête pour l’apprenant suivant.");
   }
 
+  async function loginStaff(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: identifier.trim(), password });
+      if (error || !data.user) throw new Error("INVALID_CREDENTIALS");
+      const { data: allowed, error: roleError } = await supabase.rpc("has_any_role", {
+        p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"],
+      });
+      if (roleError || allowed !== true) {
+        await supabase.auth.signOut();
+        throw new Error("KIOSK_ADMIN_REQUIRED");
+      }
+      setPassword("");
+      setMessage("Connexion réussie. Vous pouvez ouvrir ou fermer la journée.");
+    } catch (error) {
+      setMessage(errorMessage(error instanceof Error ? error.message : "Connexion impossible."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function loginLearner(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
