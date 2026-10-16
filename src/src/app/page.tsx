@@ -167,11 +167,20 @@ export default function Home() {
     if (!canAccessModule(key, roles.map(role => role.code))) {
       setRows([]); setError("Accès refusé : ce module n’est pas autorisé pour votre rôle."); setLoading(false); return;
     }
-    if (key === "justifications") {
+    if (key === "justifications" || key === "students" || key === "staff") {
       setLoading(true); setError("");
-      const { data, error: rpcError } = await supabase.rpc("list_absence_justifications");
-      if (rpcError) { setRows([]); setError("Impossible de charger les justificatifs. Vérifiez que la migration de workflow est installée."); }
-      else setRows((data ?? []) as unknown as Record<string, unknown>[]);
+      const rpcName = key === "justifications" ? "list_absence_justifications" : key === "students" ? "list_students_directory" : "list_staff_directory";
+      const { data, error: rpcError } = await supabase.rpc(rpcName);
+      if (rpcError) {
+        setRows([]);
+        setError(key === "justifications"
+          ? "Impossible de charger les justificatifs. Le workflow d’absence doit être installé sur la base TEST."
+          : key === "students"
+            ? "Impossible de charger les apprenants. Vérifiez les autorisations du répertoire et des profils sur TEST."
+            : "Impossible de charger le personnel. Vérifiez les autorisations du répertoire et des profils sur TEST.");
+      } else {
+        setRows((data ?? []) as unknown as Record<string, unknown>[]);
+      }
       setLoading(false); return;
     }
     const config = modules.find(m => m.key === key);
