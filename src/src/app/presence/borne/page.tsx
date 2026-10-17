@@ -23,10 +23,10 @@ function errorMessage(raw: string) {
   const messages: Record<string, string> = {
     AUTH_REQUIRED: "La session a expiré. Reconnectez-vous sur la borne.",
     KIOSK_NOT_REGISTERED: "Cette borne n’est pas activée. Demandez à la Direction de l’enregistrer.",
-    KIOSK_ADMIN_REQUIRED: "Seuls la Direction, la pré-administration ou le secrétariat autorisé peuvent ouvrir ou fermer la journée et gérer la borne.",
-    OPERATING_DAY_CLOSED: "La journée est fermée. La Direction doit ouvrir la journée et activer la borne.",
+    KIOSK_ADMIN_REQUIRED: "Seuls la Direction, la pré-administration ou le secrétariat autorisé peuvent gérer la borne et l’ouverture administrative.",
+    OPERATING_DAY_CLOSED: "La journée administrative est fermée. Cela ne désactive pas la borne, qui suit son horaire automatique de 08 h 30 à 19 h 00.",
     OPERATING_DAY_ALREADY_CLOSED: "La journée est déjà fermée. La borne ne peut plus être activée aujourd’hui.",
-    OPERATING_DAY_NOT_OPEN: "Aucune journée ouverte à fermer. Ouvrez d’abord la journée et activez la borne.",
+    OPERATING_DAY_NOT_OPEN: "Aucune journée administrative n’est ouverte. Cela n’empêche pas le pointage pendant les horaires autorisés de la borne.",
     INVALID_CREDENTIALS: "Identifiant ou mot de passe incorrect, ou compte apprenant non autorisé.",
     TOO_MANY_ATTEMPTS: "Trop de tentatives. Attendez quinze minutes avant de réessayer.",
     SERVICE_UNAVAILABLE: "Le service de connexion est temporairement indisponible. Réessayez plus tard.",
@@ -75,9 +75,9 @@ export default function PresenceKioskPage() {
       // Row-level security can hide the role rows from ordinary staff accounts and make
       // the operating-day controls disappear even when the server authorizes that person.
       const [{ data: adminAccess }, { data: operatingDayAccess }, { data: locationAccess }] = await Promise.all([
-        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
-        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"] }),
-        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN"] }),
+        supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
+        supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
+        supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN"] }),
       ]);
       if (alive) {
         setIsAdmin(adminAccess === true);
@@ -174,7 +174,7 @@ export default function PresenceKioskPage() {
       const { data, error } = await supabase.auth.signInWithPassword({ email: identifier.trim(), password });
       if (error || !data.user) throw new Error("INVALID_CREDENTIALS");
       const { data: allowed, error: roleError } = await supabase.rpc("has_any_role", {
-        p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL"],
+        p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"],
       });
       if (roleError || allowed !== true) {
         await supabase.auth.signOut();
