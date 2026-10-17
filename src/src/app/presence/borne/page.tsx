@@ -373,8 +373,8 @@ export default function PresenceKioskPage() {
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage apprenant</h2>
             {!deviceRegistered ? (
               <>
-                <h2 style={{ marginTop: 0, fontSize: 18 }}>Ouverture de la journée — personnel autorisé</h2>
-                <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>La borne n’est pas encore enregistrée sur cet appareil. Un membre autorisé peut se connecter ci-dessous pour l’enregistrer. Cette action ne nécessite pas d’ouvrir la journée administrative.</p>
+                <h2 style={{ marginTop: 0, fontSize: 18 }}>Gestion indépendante de la borne et de la journée — personnel autorisé</h2>
+                <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>La borne n’est pas encore enregistrée sur cet appareil. Un membre autorisé peut se connecter ci-dessous pour l’enregistrer. Après cette première opération, la borne fonctionne automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative.</p>
                 <form onSubmit={loginStaff} style={{ display: "grid", gap: 12, marginTop: 12 }}>
                   <label style={labelStyle}>E-mail professionnel
                     <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="Votre e-mail professionnel" />
