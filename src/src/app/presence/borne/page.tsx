@@ -141,7 +141,7 @@ export default function PresenceKioskPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("AUTH_REQUIRED");
-      const response = await fetch("/api/presence/kiosk-revoke", {
+      const response = await fetch("/api/presence/operating-day/close", {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
