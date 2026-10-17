@@ -59,10 +59,18 @@ export default function SecretariatQrCheckinsPage() {
       const current = data.session?.user ?? null;
       setUser(current);
       if (!current) { setLoading(false); return; }
-      const { data: allowedRole, error: roleError } = await supabase.rpc("has_any_role", {
-        p_roles: ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE"]
-      });
-      const allowed = !roleError && allowedRole === true;
+      const roleList = ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE"];
+      const { data: kioskRole, error: kioskRoleError } = await supabase.rpc("kiosk_actor_has_role", { p_roles: roleList });
+      let allowedRole: boolean | null = !kioskRoleError && kioskRole === true ? true : null;
+      if (kioskRoleError) {
+        const { data: legacyRole, error: legacyRoleError } = await supabase.rpc("has_any_role", { p_roles: roleList });
+        if (!legacyRoleError) allowedRole = legacyRole === true;
+        else {
+          const { data: productionRole, error: productionRoleError } = await supabase.rpc("has_any_role", { role_codes: roleList });
+          allowedRole = !productionRoleError && productionRole === true;
+        }
+      }
+      const allowed = allowedRole === true;
       if (!alive) return;
       setAuthorized(allowed);
       if (allowed) await loadRequests();
