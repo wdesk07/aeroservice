@@ -118,6 +118,7 @@ export default function SecretariatQrCheckinsPage() {
           </div>
           <button onClick={() => void loadRequests()} disabled={loading} style={secondaryButton}>↻ Actualiser</button>
         </header>
+        <p style={{ margin: "0 0 16px" }}><a href="/" style={{ color: "#174ea6", fontWeight: 700, textDecoration: "none" }}>← Retour à l’espace principal</a></p>
 
         {!user && <div style={warningBox}>Connectez-vous d’abord à Aéro Service avec votre compte Direction ou secrétariat, puis revenez sur cette page.</div>}
         {user && !authorized && <div style={warningBox}>Votre compte n’a pas le rôle requis pour examiner les pointages QR.</div>}
