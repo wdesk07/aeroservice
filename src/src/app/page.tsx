@@ -192,7 +192,7 @@ export default function Home() {
     // Try the TEST table when the production-shaped table is unavailable OR empty,
     // otherwise the UI can misleadingly show "Aucune donnée" while TEST rows exist.
     if (key === "attendance" && (result.error || !(result.data?.length))) {
-      const fallback = await supabase.from("daily_attendance").select("*,penalties(id,amount_fcfa,status)").limit(100);
+      const fallback = await supabase.from("daily_attendance").select("*").limit(100);
       if (!fallback.error) {
         const mapped = (fallback.data ?? []).map((row: Record<string, unknown>) => ({
           ...row,
@@ -200,17 +200,17 @@ export default function Home() {
           delay_minutes: row.minutes_after_cutoff ?? 0,
           access_blocked: row.status === "late" || row.status === "absent",
           anomaly_reason: row.status === "late" ? "Retard à régulariser" : row.status === "absent" ? "Absence à régulariser" : null,
-          penalty_id: Array.isArray(row.penalties) ? (row.penalties as any[])[0]?.id ?? null : (row.penalties as any)?.id ?? null,
-          penalty_amount_fcfa: Array.isArray(row.penalties) ? (row.penalties as any[])[0]?.amount_fcfa ?? null : (row.penalties as any)?.amount_fcfa ?? null,
-          penalty_status: Array.isArray(row.penalties) ? (row.penalties as any[])[0]?.status ?? null : (row.penalties as any)?.status ?? null
+          penalty_id: null,
+          penalty_amount_fcfa: null,
+          penalty_status: null
         }));
         setRows(mapped);
         setLoading(false);
         return;
       }
-      if (result.error || !(result.data?.length)) {
+      if (result.error && fallback.error) {
         setRows([]);
-        setError("Impossible de lire les pointages de test. Vérifiez les autorisations de lecture (RLS) sur daily_attendance.");
+        setError("Impossible de lire les pointages. Vérifiez les autorisations de lecture dans Supabase.");
         setLoading(false);
         return;
       }
