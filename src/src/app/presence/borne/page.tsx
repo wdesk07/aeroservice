@@ -397,6 +397,19 @@ export default function PresenceKioskPage() {
                   </label>
                   <button type="submit" disabled={busy} style={primaryButton}>{busy ? "Connexion…" : "Se connecter"}</button>
                 </form>
+                <details style={{ marginTop: 18, borderTop: "1px solid #dce4ef", paddingTop: 12 }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 700, color: "#174ea6" }}>Personnel autorisé — gérer l’ouverture et la fermeture de la journée</summary>
+                  <p style={{ color: "#52647a", fontSize: 13, lineHeight: 1.5 }}>Cette gestion est indépendante du pointage automatique de la borne.</p>
+                  <form onSubmit={loginStaff} style={{ display: "grid", gap: 12, marginTop: 12 }}>
+                    <label style={labelStyle}>E-mail professionnel
+                      <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="Votre e-mail professionnel" />
+                    </label>
+                    <label style={labelStyle}>Mot de passe
+                      <input autoComplete="current-password" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} style={inputStyle} />
+                    </label>
+                    <button type="submit" disabled={busy} style={secondaryButton}>{busy ? "Vérification…" : "Se connecter comme personnel autorisé"}</button>
+                  </form>
+                </details>
               </>
             )}
           </div>
