@@ -57,7 +57,7 @@ begin
   new.updated_at := now();
   return new;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION private.after_attendance_insert()
@@ -91,7 +91,7 @@ begin
   end if;
   return new;
 end;
-$function$
+$function$;
 
 
 create or replace function public.activate_presence_kiosk(p_name text default 'Borne principale')
@@ -645,7 +645,7 @@ begin
     'planned_at',v_att.planned_at,'arrived_at',v_att.arrived_at,'anomaly',v_att.anomaly,
     'anomaly_reason',v_att.anomaly_reason,'checkpoint',v_checkpoint.name,'session_id',v_session_id);
 end;
-$function$
+$function$;
 
 
 update public.penalty_rules set tolerance_minutes=case when lower(person_type)='staff' then 10 else 15 end where active=true and lower(penalty_type)='late_arrival' and application_mode='automatic';
