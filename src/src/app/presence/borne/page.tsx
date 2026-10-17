@@ -111,13 +111,27 @@ export default function PresenceKioskPage() {
       const payload = await response.json();
       if (!response.ok || !payload?.activated) throw new Error(payload?.error || "KIOSK_ACTIVATION_FAILED");
       setDeviceRegistered(true);
-      setOperatingDayStatus("open");
-      setMessage("Journée ouverte et borne activée. Le jeton est conservé dans un cookie sécurisé inaccessible au JavaScript.");
+      setMessage("Borne enregistrée. Son activation dépend uniquement des horaires 08 h 30–19 h, pas de l’ouverture administrative.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Activation impossible."));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function openOperatingDay() {
+    setBusy(true); setMessage("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/presence/operating-day/open", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "OPERATING_DAY_OPEN_FAILED");
+      setOperatingDayStatus("open");
+      setMessage("Ouverture administrative enregistrée. La borne reste indépendante et suit ses horaires automatiques.");
+    } catch (error) { setMessage(errorMessage(error instanceof Error ? error.message : "Ouverture impossible.")); }
+    finally { setBusy(false); }
   }
 
   async function revokeKiosk() {
@@ -133,9 +147,8 @@ export default function PresenceKioskPage() {
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "KIOSK_REVOKE_FAILED");
-      setDeviceRegistered(false);
       setOperatingDayStatus("closed");
-      setMessage("Journée fermée. Les jetons actifs de borne sont révoqués et aucun nouveau pointage ne sera accepté.");
+      setMessage("Fermeture administrative enregistrée. La borne n’est pas désactivée par cette action et suit toujours ses horaires automatiques.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Révocation impossible."));
     } finally {
@@ -168,7 +181,7 @@ export default function PresenceKioskPage() {
         throw new Error("KIOSK_ADMIN_REQUIRED");
       }
       setPassword("");
-      setMessage("Connexion réussie. Vous pouvez ouvrir ou fermer la journée.");
+      setMessage("Connexion réussie. Vous pouvez enregistrer la borne et gérer séparément l’ouverture ou la fermeture de la journée.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Connexion impossible."));
     } finally {
@@ -324,6 +337,7 @@ export default function PresenceKioskPage() {
             <p style={{ margin: "5px 0 0", color: "#52647a" }}>Ordinateur du centre · tablette compatible</p>
           </div>
         </header>
+        <p style={{ margin: "0 0 16px" }}><a href="/" style={{ color: "#174ea6", fontWeight: 700, textDecoration: "none" }}>← Retour à l’espace principal</a></p>
         {isAdmin && <nav style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8, marginBottom: 18 }}>
           <a href="/presence/qr-affiche" style={navLinkStyle}>QR officiel à imprimer</a>
           <a href="/presence/secretariat" style={navLinkStyle}>File du secrétariat</a>
@@ -341,14 +355,16 @@ export default function PresenceKioskPage() {
               <button type="button" onClick={() => void configureCheckpointLocation()} disabled={busy} style={secondaryButton}>{busy ? "Enregistrement…" : "Enregistrer la position GPS du centre"}</button>
             </div>}
             {deviceRegistered ? (
-              <>
-                <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée. Le pointage est automatiquement disponible de 08 h 30 à 19 h 00.</p>
-                <button type="button" onClick={() => void signOut()} disabled={busy} style={primaryButton}>Se déconnecter et laisser la borne disponible</button>
-                <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Enregistrer la fermeture d’Aéro Service</button>
-              </>
+              <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée. Le pointage est disponible automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative.</p>
             ) : (
-              <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Ouverture en cours…" : "Enregistrer l’ouverture d’Aéro Service"}</button>
+              <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Enregistrer la borne sur cet appareil"}</button>
             )}
+            {operatingDayStatus === "open" ? (
+              <button type="button" onClick={() => void revokeKiosk()} disabled={busy} style={secondaryButton}>Enregistrer la fermeture administrative de la journée</button>
+            ) : (
+              <button type="button" onClick={() => void openOperatingDay()} disabled={busy} style={secondaryButton}>Enregistrer l’ouverture administrative de la journée</button>
+            )}
+            <button type="button" onClick={() => void signOut()} disabled={busy} style={secondaryButton}>Se déconnecter et laisser la borne disponible</button>
           </div>
         )}
 
@@ -358,7 +374,7 @@ export default function PresenceKioskPage() {
             {!deviceRegistered ? (
               <>
                 <h2 style={{ marginTop: 0, fontSize: 18 }}>Ouverture de la journée — personnel autorisé</h2>
-                <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>Cette borne n’est pas activée. Un membre du personnel doit d’abord se connecter à son espace, puis revenir ici pour ouvrir la journée.</p>
+                <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>La borne n’est pas encore enregistrée sur cet appareil. Un membre autorisé peut se connecter ci-dessous pour l’enregistrer. Cette action ne nécessite pas d’ouvrir la journée administrative.</p>
                 <form onSubmit={loginStaff} style={{ display: "grid", gap: 12, marginTop: 12 }}>
                   <label style={labelStyle}>E-mail professionnel
                     <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="Votre e-mail professionnel" />
@@ -366,7 +382,7 @@ export default function PresenceKioskPage() {
                   <label style={labelStyle}>Mot de passe
                     <input autoComplete="current-password" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} style={inputStyle} />
                   </label>
-                  <button type="submit" disabled={busy} style={primaryButton}>{busy ? "Vérification…" : "Se connecter pour ouvrir la journée"}</button>
+                  <button type="submit" disabled={busy} style={primaryButton}>{busy ? "Vérification…" : "Se connecter pour gérer la borne"}</button>
                 </form>
               </>
             ) : (
