@@ -48,11 +48,10 @@ begin
   select s.* into v_student from public.students s where s.id=v_uid;
   if not found then raise exception 'ACTIVE_STUDENT_REQUIRED'; end if;
 
-  if not exists (
-    select 1 from public.operating_days od
-    where od.business_date=v_local::date and od.status='open'
-  ) then raise exception 'OPERATING_DAY_CLOSED'; end if;
-  if v_local::time >= time '19:00' then raise exception 'STUDENT_CHECKIN_CLOSED'; end if;
+  -- The kiosk's availability is based on its own 08:30–19:00 schedule, not on the administrative day record.
+  if v_local::time < time '08:30' or v_local::time >= time '19:00' then
+    raise exception 'STUDENT_CHECKIN_CLOSED';
+  end if;
 
   select * into v_session from public.course_sessions c
   where c.session_date=v_local::date
