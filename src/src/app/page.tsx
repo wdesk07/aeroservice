@@ -346,7 +346,7 @@ export default function Home() {
     const personId = String(registration.person_id ?? "");
     if (!personId) { setError("Impossible d’envoyer le lien : identifiant du compte apprenant manquant."); return; }
     setSendingWelcomeFor(personId); setError(""); setNotice("");
-    const { data, error: sendError } = await supabase.functions.invoke("send-welcome-email", { body: { person_id: personId } });
+    const { data, error: sendError } = await supabase.functions.invoke("send-welcome-email", { body: { person_id: personId, redirect_to: window.location.origin } });
     if (sendError || data?.error || !data?.ok) {
       const detail = data?.detail || data?.error || sendError?.message || "Envoi non confirmé.";
       setError("Le compte reste actif, mais le message de bienvenue n’a pas été envoyé. " + detail);
