@@ -67,26 +67,29 @@ Deno.serve(async (req: Request) => {
   const redirectTo = safeRedirect(body.redirect_to);
   if (!redirectTo) return reply(400, { error: "INVALID_REDIRECT", detail: "L’adresse de retour doit être l’URL HTTPS de l’aperçu Aéro Service." });
 
+  // Find an approved registration for this account, rather than checking only
+  // the newest registration (a newer pending application must not mask an approved one).
   const { data: registration, error: registrationError } = await admin
     .from("registrations")
     .select("status,registration_number")
     .eq("person_id", personId)
+    .ilike("status", "approved")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (registrationError) return reply(503, { error: "REGISTRATION_LOOKUP_FAILED", detail: registrationError.message });
-  if (!registration || String(registration.status).toLowerCase() !== "approved") {
-    return reply(409, { error: "REGISTRATION_NOT_APPROVED", detail: "L’inscription doit être approuvée avant l’envoi du lien." });
+  if (!registration) {
+    return reply(200, { ok: false, error: "REGISTRATION_NOT_APPROVED", detail: "Aucune inscription approuvée n’a été trouvée pour ce compte dans la base TEST. Vérifie que l’aperçu et la fonction utilisent le même projet Supabase." });
   }
 
   const { data: profile, error: profileError } = await admin
     .from("profiles").select("email,status").eq("id", personId).maybeSingle();
   if (profileError || !profile) return reply(404, { error: "LEARNER_PROFILE_NOT_FOUND" });
   if (String(profile.status ?? "").toLowerCase() !== "active") {
-    return reply(409, { error: "ACCOUNT_NOT_ACTIVE", detail: "Le compte doit être actif avant l’envoi du lien." });
+    return reply(200, { ok: false, error: "ACCOUNT_NOT_ACTIVE", detail: "Le compte doit être actif avant l’envoi du lien." });
   }
   if (typeof profile.email !== "string" || !profile.email.trim()) {
-    return reply(400, { error: "EMAIL_MISSING", detail: "Aucune adresse e-mail n’est enregistrée pour ce compte." });
+    return reply(200, { ok: false, error: "EMAIL_MISSING", detail: "Aucune adresse e-mail n’est enregistrée pour ce compte." });
   }
 
   // Ask Supabase Auth to email a real one-time magic link. create_user=false prevents
