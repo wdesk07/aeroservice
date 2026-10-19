@@ -181,10 +181,6 @@ export default function DirectionSuiviPage() {
     const records = sessionRows.filter((row) => row.formation_name === name);
     return { name, total: records.length, present: records.filter((row) => ["present", "on_time"].includes(row.status.toLowerCase())).length, late: records.filter((row) => row.status.toLowerCase() === "late").length, absent: records.filter((row) => row.status.toLowerCase() === "absent").length, regularized: records.filter((row) => ["regularized", "regularized_late", "regularised", "regularised_late"].includes(row.status.toLowerCase())).length };
   }), [formationOptions, sessionRows]);
-  const selectedJustifications = useMemo(() => {
-    const people = new Set(filteredSessionRows.map((row) => row.person_id));
-    return justifications.filter((item) => people.has(item.person_id) || (formationFilter === "all" && filteredAttendanceRows.some((row) => row.person_id === item.person_id)));
-  }, [justifications, filteredSessionRows, filteredAttendanceRows, formationFilter]);
   const filteredAttendanceRows = useMemo(() => rows.filter((row) => {
     const staff = ["staff", "personnel", "teacher", "enseignant"].includes(row.person_type.toLowerCase());
     if (personTypeFilter === "staff" && !staff) return false;
@@ -209,6 +205,10 @@ export default function DirectionSuiviPage() {
     if (statusFilter === "upcoming" && !["scheduled", "upcoming", "pending"].includes(status)) return false;
     return true;
   }), [sessionRows, formationFilter, statusFilter]);
+  const selectedJustifications = useMemo(() => {
+    const people = new Set([...filteredSessionRows.map((row) => row.person_id), ...filteredAttendanceRows.map((row) => row.person_id)]);
+    return justifications.filter((item) => people.has(item.person_id));
+  }, [justifications, filteredSessionRows, filteredAttendanceRows]);
   const ranking = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string; count: number; minutes: number }>();
     for (const row of rows) {
