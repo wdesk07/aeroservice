@@ -216,6 +216,10 @@ export default function PresenceKioskPage() {
 
   async function syncOfflineObservations() {
     if (!navigator.onLine || !user || !canManageOperatingDay || offlineEvents.length === 0 || syncingOffline) return;
+    // The server accepts batches of at most 100. Send one batch per attempt so
+    // larger queues can drain progressively without losing unsent observations.
+    const batch = offlineEvents.slice(0, 100);
+    const batchIds = new Set(batch.map((item) => item.client_event_id));
     setSyncingOffline(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -224,12 +228,12 @@ export default function PresenceKioskPage() {
       const response = await fetch("/api/presence/offline-backup", {
         method: "POST",
         headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
-        body: JSON.stringify({ events: offlineEvents }),
+        body: JSON.stringify({ events: batch }),
       });
       const payload = await response.json();
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "SYNC_FAILED");
-      const acceptedIds = new Set(offlineEvents.map((item) => item.client_event_id));
-      setOfflineEvents((current) => current.filter((item) => !acceptedIds.has(item.client_event_id)));
+      if (payload.accepted !== batch.length) throw new Error("SYNC_COUNT_MISMATCH");
+      setOfflineEvents((current) => current.filter((item) => !batchIds.has(item.client_event_id)));
       setMessage(String(payload.accepted) + " observation(s) transmises au serveur, en attente de vérification par la Direction. Aucune pénalité ni présence officielle n’a été créée automatiquement.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Synchronisation impossible. Les observations restent sur la borne."));
