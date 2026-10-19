@@ -28,14 +28,14 @@ const categories = [
 function parseSemicolonCsv(input: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [], cell = "", quoted = false;
-  const source = input.replace(/^\\uFEFF/, "");
+  const source = input.replace(/^\uFEFF/, "");
   for (let i = 0; i < source.length; i++) {
     const ch = source[i];
     if (ch === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; }
     else if (ch === '"') quoted = !quoted;
     else if (ch === ";" && !quoted) { row.push(cell); cell = ""; }
-    else if ((ch === "\\n" || ch === "\\r") && !quoted) {
-      if (ch === "\\r" && source[i + 1] === "\\n") i++;
+    else if ((ch === "\n" || ch === "\r") && !quoted) {
+      if (ch === "\r" && source[i + 1] === "\n") i++;
       row.push(cell); cell = "";
       if (row.some((v) => v.length)) rows.push(row);
       row = [];
