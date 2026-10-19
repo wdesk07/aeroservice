@@ -90,9 +90,9 @@ export default function PresenceKioskPage() {
       // Row-level security can hide the role rows from ordinary staff accounts and make
       // the operating-day controls disappear even when the server authorizes that person.
       const [{ data: adminAccess }, { data: operatingDayAccess }, { data: locationAccess }] = await Promise.all([
-        supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
-        supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
-        supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN"] }),
+        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
+        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
+        supabase.rpc("has_any_role", { p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN"] }),
       ]);
       if (alive) {
         const verifiedStaff = adminAccess === true && operatingDayAccess === true;
