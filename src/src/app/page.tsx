@@ -187,20 +187,33 @@ export default function Home() {
 
   useEffect(() => {
     if (!user?.id || offlineDraftLoadedFor !== user.id) return;
-    const savedAt = new Date().toISOString();
-    const draft = {
-      version: 1,
-      savedAt,
-      active,
-      createValues,
-      form,
-      lateForm,
-      justificationForm,
-      ruleForm,
-      applyRuleForm,
-      showCreate,
-    };
+    const hasMeaningfulDraft =
+      Object.values(createValues).some(value => String(value ?? "").trim() !== "") ||
+      [form.code, form.name, form.duration, form.description].some(value => String(value ?? "").trim() !== "") ||
+      [lateForm.person_id, lateForm.arrived_time, lateForm.amount_fcfa, lateForm.provider, lateForm.transaction_reference, lateForm.reason].some(value => String(value ?? "").trim() !== "") ||
+      [justificationForm.attendance_id, justificationForm.reason, justificationForm.document_url].some(value => String(value ?? "").trim() !== "") ||
+      [ruleForm.formation_id, ruleForm.description, ruleForm.applies_after_time].some(value => String(value ?? "").trim() !== "") ||
+      [applyRuleForm.rule_id, applyRuleForm.person_id].some(value => String(value ?? "").trim() !== "") ||
+      showCreate;
     try {
+      if (!hasMeaningfulDraft) {
+        localStorage.removeItem(`aero_operational_draft_v1:${user.id}`);
+        setOfflineDraftSavedAt(null);
+        return;
+      }
+      const savedAt = new Date().toISOString();
+      const draft = {
+        version: 1,
+        savedAt,
+        active,
+        createValues,
+        form,
+        lateForm,
+        justificationForm,
+        ruleForm,
+        applyRuleForm,
+        showCreate,
+      };
       localStorage.setItem(`aero_operational_draft_v1:${user.id}`, JSON.stringify(draft));
       setOfflineDraftSavedAt(savedAt);
     } catch {
