@@ -216,27 +216,34 @@ export default function PresenceKioskPage() {
 
   async function syncOfflineObservations() {
     if (!navigator.onLine || !user || !canManageOperatingDay || offlineEvents.length === 0 || syncingOffline) return;
-    // The server accepts batches of at most 100. Send one batch per attempt so
-    // larger queues can drain progressively without losing unsent observations.
-    const batch = offlineEvents.slice(0, 100);
-    const batchIds = new Set(batch.map((item) => item.client_event_id));
+    const pendingAtStart = [...offlineEvents];
     setSyncingOffline(true);
+    let acceptedTotal = 0;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("AUTH_REQUIRED");
-      const response = await fetch("/api/presence/offline-backup", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
-        body: JSON.stringify({ events: batch }),
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "SYNC_FAILED");
-      if (payload.accepted !== batch.length) throw new Error("SYNC_COUNT_MISMATCH");
-      setOfflineEvents((current) => current.filter((item) => !batchIds.has(item.client_event_id)));
-      setMessage(String(payload.accepted) + " observation(s) transmises au serveur, en attente de vérification par la Direction. Aucune pénalité ni présence officielle n’a été créée automatiquement.");
+
+      // The server accepts at most 100 observations per request. Process the
+      // queue in bounded batches and remove only batches the server confirms.
+      for (let offset = 0; offset < pendingAtStart.length; offset += 100) {
+        const batch = pendingAtStart.slice(offset, offset + 100);
+        const batchIds = new Set(batch.map((item) => item.client_event_id));
+        const response = await fetch("/api/presence/offline-backup", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+          body: JSON.stringify({ events: batch }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok) throw new Error(payload?.error || "SYNC_FAILED");
+        if (payload.accepted !== batch.length) throw new Error("SYNC_COUNT_MISMATCH");
+        acceptedTotal += payload.accepted;
+        setOfflineEvents((current) => current.filter((item) => !batchIds.has(item.client_event_id)));
+      }
+      setMessage(String(acceptedTotal) + " observation(s) transmises au serveur, en attente de vérification par la Direction. Aucune pénalité ni présence officielle n’a été créée automatiquement.");
     } catch (error) {
-      setMessage(errorMessage(error instanceof Error ? error.message : "Synchronisation impossible. Les observations restent sur la borne."));
+      setMessage((acceptedTotal ? String(acceptedTotal) + " observation(s) synchronisée(s). " : "") +
+        errorMessage(error instanceof Error ? error.message : "Synchronisation impossible. Les observations non confirmées restent sur la borne."));
     } finally {
       setSyncingOffline(false);
     }
