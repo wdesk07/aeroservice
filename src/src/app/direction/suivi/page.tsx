@@ -178,13 +178,14 @@ export default function DirectionSuiviPage() {
   }, [isStaffView, isStudentView]);
   useEffect(() => { void load(); }, [load]);
 
+  const scopedRows = useMemo(() => rows.filter((row) => isStaffView ? ["staff", "personnel", "teacher", "enseignant"].includes(row.person_type.toLowerCase()) : isStudentView ? !["staff", "personnel", "teacher", "enseignant"].includes(row.person_type.toLowerCase()) : true), [rows, isStaffView, isStudentView]);
   const totals = useMemo(() => ({
-    checkins: rows.length,
-    late: rows.filter((row) => row.status.toLowerCase() === "late").length,
-    absent: rows.filter((row) => row.status.toLowerCase() === "absent").length,
-    staff: rows.filter((row) => ["staff", "personnel"].includes(row.person_type.toLowerCase())).length,
-    students: rows.filter((row) => ["student", "apprenant"].includes(row.person_type.toLowerCase())).length
-  }), [rows]);
+    checkins: scopedRows.length,
+    late: scopedRows.filter((row) => row.status.toLowerCase() === "late").length,
+    absent: scopedRows.filter((row) => row.status.toLowerCase() === "absent").length,
+    staff: scopedRows.filter((row) => ["staff", "personnel"].includes(row.person_type.toLowerCase())).length,
+    students: scopedRows.filter((row) => ["student", "apprenant"].includes(row.person_type.toLowerCase())).length
+  }), [scopedRows]);
   const formationOptions = useMemo(() => [...new Set([...formations.map((formation) => formation.name), ...sessionRows.map((row) => row.formation_name).filter((name): name is string => Boolean(name))])].sort((a, b) => a.localeCompare(b, "fr")), [formations, sessionRows]);
   const formationCards = useMemo(() => formationOptions.map((name) => {
     const records = sessionRows.filter((row) => row.formation_name === name);
@@ -222,13 +223,14 @@ export default function DirectionSuiviPage() {
     const grouped = new Map<string, { id: string; name: string; count: number; minutes: number }>();
     for (const row of rows) {
       if (row.status.toLowerCase() !== "late") continue;
+      if (isStaffView && !["staff", "personnel", "teacher", "enseignant"].includes(row.person_type.toLowerCase())) continue;
       const p = profiles[row.person_id];
       const current = grouped.get(row.person_id) ?? { id: row.person_id, name: fullName(p), count: 0, minutes: 0 };
       current.count += 1; current.minutes += Number(row.minutes_after_cutoff || 0);
       grouped.set(row.person_id, current);
     }
     return [...grouped.values()].sort((a, b) => b.count - a.count || b.minutes - a.minutes || a.name.localeCompare(b.name));
-  }, [rows, profiles]);
+  }, [rows, profiles, isStaffView]);
 
   if (!ready || busy) return <main style={styles.page}><section style={styles.card}>Chargement sécurisé du suivi de présence…</section></main>;
   if (!authorized) return <main style={styles.page}><section style={styles.card}><img src="/aero-service-logo.svg" alt="Logo Aéro Service" style={{ width: 100, height: 70, objectFit: "contain" }} /><h1>Suivi réservé à la Direction</h1><p>Connectez-vous avec un compte Direction, ADMIN ou PRE_ADMIN pour consulter les rapports.</p><a href="/">Retour à Aéro Service</a></section></main>;
@@ -268,7 +270,7 @@ export default function DirectionSuiviPage() {
       <h2 style={styles.h2}>Personnel le plus souvent en retard</h2>
       {ranking.length === 0 ? <p style={styles.muted}>Aucun retard enregistré sur cette période.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Rang</th><th>Nom et prénom</th><th>Catégorie</th><th>Nombre de retards</th><th>Minutes de retard cumulées</th></tr></thead><tbody>{ranking.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td><strong>{item.name}</strong></td><td>{rows.find((row) => row.person_id === item.id)?.person_type === "staff" ? "Personnel" : "Apprenant"}</td><td>{item.count}</td><td>{item.minutes} min</td></tr>)}</tbody></table></div>}
     </section>}
-    {!isStaffView && <section style={styles.card}>
+    {isStudentView && formationFilter !== "all" && <section style={styles.card}>
       <h2 style={styles.h2}>Présence et absence par séance de formation</h2>
       <p style={styles.muted}>Un seul pointage journalier reste autorisé. Chaque séance prévue est suivie séparément : une arrivée après la fin d’un cours laisse ce cours marqué absent, même si l’apprenant pointe pour une séance plus tardive.</p>
       {personTypeFilter === "staff" ? <p style={styles.muted}>Le personnel est suivi dans le tableau de pointages ci-dessous ; le détail par séance concerne les formations des apprenants.</p> : filteredSessionRows.length === 0 ? <p style={styles.muted}>Aucune séance ne correspond à cette formation, cette date et ce statut.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Apprenant</th><th>Formation</th><th>Séance</th><th>Heure prévue</th><th>Pointage journalier</th><th>Statut de la séance</th></tr></thead><tbody>{filteredSessionRows.map((row) => { const status = row.status.toLowerCase(); const label = ["present","on_time"].includes(status) ? "Présent" : status === "late" ? "En retard" : status === "absent" ? "Absent" : ["regularized","regularized_late","regularised","regularised_late"].includes(status) ? "Régularisé" : "À venir"; const badge = ["present","on_time"].includes(status) ? styles.ontime : status === "late" ? styles.late : status === "absent" ? styles.absent : ["regularized","regularized_late","regularised","regularised_late"].includes(status) ? styles.regularized : styles.pending; return <tr key={row.id}><td>{row.session_date}</td><td><strong>{fullName({ id: row.person_id, display_name: row.display_name, first_name: row.first_name, last_name: row.last_name, email: null })}</strong></td><td>{row.formation_name || "—"}</td><td>{row.planned_start?.slice(0,5)}–{row.planned_end?.slice(0,5)}</td><td>{row.nominal_time?.slice(0,5)}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...badge }}>{label}</span></td></tr>; })}</tbody></table></div>}
