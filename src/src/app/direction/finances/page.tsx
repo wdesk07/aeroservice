@@ -9,6 +9,7 @@ type Payment = { id: string; person_id: string; penalty_id: string | null; amoun
 type Student = { id: string; formation_id: string | null; group_id: string | null; student_number: string | null; };
 type StudentGroup = { id: string; formation_id: string | null; name: string; };
 type Formation = { id: string; name: string; code: string | null; };
+type Profile = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; };
 type Summary = { id: string; name: string; count: number; due: number; paid: number; outstanding: number; };
 const money = (value: number) => `${Math.round(value).toLocaleString("fr-FR")} FCFA`;
 const panel: React.CSSProperties = { background: "#fff", border: "1px solid #dce4ef", borderRadius: 15, padding: 18, boxShadow: "0 4px 18px rgba(20,42,70,.04)" };
