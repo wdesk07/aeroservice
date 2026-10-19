@@ -25,6 +25,7 @@ export default function DirectorFinancesPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [groups, setGroups] = useState<StudentGroup[]>([]);
   const [formations, setFormations] = useState<Formation[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [formationFilter, setFormationFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "due" | "paid">("all");
 
@@ -37,20 +38,24 @@ export default function DirectorFinancesPage() {
     const codes = (roleRows ?? []).flatMap((item: any) => Array.isArray(item.roles) ? item.roles : item.roles ? [item.roles] : []).map((role: any) => String(role.code).toUpperCase());
     if (roleError || !["DIRECTOR", "ADMIN", "PRE_ADMIN"].some((code) => codes.includes(code))) { setAuthorized(false); setReady(true); setBusy(false); return; }
     setAuthorized(true); setReady(true);
-    const [p, pay, s, g, f] = await Promise.all([
+    const [p, pay, s, g, f, prof] = await Promise.all([
       supabase.from("penalties").select("id,person_id,amount_fcfa,status,penalty_type,description,created_at").limit(5000),
       supabase.from("payments").select("id,person_id,penalty_id,amount_fcfa,status,payment_category,payment_type,received_at,receipt_number").limit(5000),
       supabase.from("students").select("id,formation_id,group_id,student_number").limit(5000),
       supabase.from("groups").select("id,formation_id,name").limit(2000),
-      supabase.from("formations").select("id,name,code").limit(1000)
+      supabase.from("formations").select("id,name,code").limit(1000),
+      supabase.from("profiles").select("id,display_name,first_name,last_name").limit(10000)
     ]);
-    const failures = [p.error, pay.error, s.error, g.error, f.error].filter(Boolean);
+    const failures = [p.error, pay.error, s.error, g.error, f.error, prof.error].filter(Boolean);
     if (failures.length) setError("Une partie des données financières est inaccessible. Vérifiez les autorisations de lecture sur TEST. " + failures.map((e: any) => e.message).join(" · "));
     setPenalties((p.data ?? []) as Penalty[]);
     setPayments((pay.data ?? []) as Payment[]);
     setStudents((s.data ?? []) as Student[]);
     setGroups((g.data ?? []) as StudentGroup[]);
     setFormations((f.data ?? []) as Formation[]);
+    const profileMap: Record<string, Profile> = {};
+    for (const profile of (prof.data ?? []) as Profile[]) profileMap[profile.id] = profile;
+    setProfiles(profileMap);
     setBusy(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -81,7 +86,25 @@ export default function DirectorFinancesPage() {
 
   const visibleSummaries = summaries.filter((item) => (formationFilter === "all" || item.id === formationFilter) && (statusFilter === "all" || (statusFilter === "due" ? item.outstanding > 0 : item.outstanding === 0)));
   const totals = summaries.reduce((all, item) => ({ count: all.count + item.count, due: all.due + item.due, paid: all.paid + item.paid, outstanding: all.outstanding + item.outstanding }), { count: 0, due: 0, paid: 0, outstanding: 0 });
-  const penaltyPayments = payments.filter((payment) => payment.status.toLowerCase() === "validated" && (payment.penalty_id || payment.payment_category?.toLowerCase() === "penalty" || payment.payment_type?.toLowerCase() === "penalty")).reduce((sum, payment) => sum + Number(payment.amount_fcfa || 0), 0);
+  const penaltyPayments = payments.filter((payment) => payment.status.toLowerCase() === "validated" && (payment.penalty_id || payment.payment_category?.toLowerCase().includes("penalt") || payment.payment_type?.toLowerCase().includes("penalt"))).reduce((sum, payment) => sum + Number(payment.amount_fcfa || 0), 0);
+  const penaltyDetails = useMemo(() => {
+    const studentById = new Map(students.map((student) => [student.id, student]));
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+    const formationById = new Map(formations.map((formation) => [formation.id, formation]));
+    return penalties.map((penalty) => {
+      const student = studentById.get(penalty.person_id);
+      const group = student?.group_id ? groupById.get(student.group_id) : null;
+      const formationId = student?.formation_id ?? group?.formation_id ?? null;
+      const formation = formationId ? formationById.get(formationId) : null;
+      const linkedPayments = payments.filter((payment) => payment.penalty_id === penalty.id && payment.status.toLowerCase() === "validated");
+      const linkedAmount = linkedPayments.reduce((sum, payment) => sum + Number(payment.amount_fcfa || 0), 0);
+      const amount = Number(penalty.amount_fcfa || 0);
+      const paid = penalty.status.toLowerCase() === "paid" ? amount : Math.min(amount, linkedAmount);
+      const profile = profiles[penalty.person_id];
+      const lastPayment = [...linkedPayments].sort((a,b) => new Date(b.received_at ?? 0).getTime() - new Date(a.received_at ?? 0).getTime())[0] ?? null;
+      return { ...penalty, formationId: formation?.id ?? (student ? "unassigned" : "staff"), formationName: formation?.name ?? (student ? "Formation non renseignée" : "Personnel / hors formation"), personName: profile?.display_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Nom à compléter", paid, outstanding: Math.max(0, amount - paid), lastPayment };
+    }).filter((item) => (formationFilter === "all" || item.formationId === formationFilter) && (statusFilter === "all" || (statusFilter === "due" ? item.outstanding > 0 : item.outstanding === 0))).sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,300);
+  }, [penalties, payments, students, groups, formations, profiles, formationFilter, statusFilter]);
 
   if (!ready || busy) return <main style={{ minHeight: "100vh", padding: 24, background: "#f3f6fa", color: "#172b45" }}><section style={{ ...panel, maxWidth: 1000, margin: "0 auto" }}>Chargement du point financier…</section></main>;
   if (!authorized) return <main style={{ minHeight: "100vh", padding: 24, background: "#f3f6fa", color: "#172b45" }}><section style={{ ...panel, maxWidth: 680, margin: "0 auto" }}><img src="/aero-service-logo.svg" alt="Logo Aéro Service" style={{ width: 92, height: 64, objectFit: "contain" }} /><h1>Point financier réservé à la Direction</h1><p>Connectez-vous avec un compte Direction, ADMIN ou PRE_ADMIN.</p><a href="/">Retour à Aéro Service</a></section></main>;
@@ -99,6 +122,11 @@ export default function DirectorFinancesPage() {
       <section style={panel}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end", justifyContent: "space-between" }}><div><h2 style={{ margin: "0 0 5px", fontSize: 19 }}>Suivi par formation</h2><p style={{ ...muted, margin: 0 }}>Les montants proviennent des pénalités enregistrées et des paiements validés associés.</p></div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700 }}>Formation<select style={{ ...btn, minWidth: 190 }} value={formationFilter} onChange={(e) => setFormationFilter(e.target.value)}><option value="all">Toutes les formations</option>{summaries.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700 }}>Règlement<select style={btn} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}><option value="all">Tous</option><option value="due">Reste à payer</option><option value="paid">Tout réglé</option></select></label></div></div>
         {visibleSummaries.length === 0 ? <p style={muted}>Aucune pénalité ne correspond à ce filtre.</p> : <div style={{ overflowX: "auto", marginTop: 14 }}><table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700, fontSize: 13 }}><thead><tr>{["Formation / catégorie","Nombre de pénalités","Montant dû","Montant réglé","Reste à payer"].map((label)=><th key={label} style={{ padding: 11, textAlign: "left", borderBottom: "1px solid #dce4ef", color: "#53657c" }}>{label}</th>)}</tr></thead><tbody>{visibleSummaries.map((item)=><tr key={item.id}><td style={{ padding: 12, borderBottom: "1px solid #edf1f6", fontWeight: 700 }}>{item.name}</td><td style={{ padding: 12, borderBottom: "1px solid #edf1f6" }}>{item.count}</td><td style={{ padding: 12, borderBottom: "1px solid #edf1f6" }}>{money(item.due)}</td><td style={{ padding: 12, borderBottom: "1px solid #edf1f6", color: "#17633a" }}>{money(item.paid)}</td><td style={{ padding: 12, borderBottom: "1px solid #edf1f6", color: item.outstanding ? "#9a2727" : "#17633a", fontWeight: 700 }}>{money(item.outstanding)}</td></tr>)}</tbody></table></div>}
+      </section>
+      <section style={panel}>
+        <h2 style={{ margin: "0 0 6px", fontSize: 19 }}>Détail des pénalités et régularisations</h2>
+        <p style={{ ...muted, marginTop: 0 }}>Jusqu’à 300 dossiers récents sont affichés. Un règlement compte comme payé uniquement s’il est validé ou si la pénalité est déjà au statut « payé ».</p>
+        {penaltyDetails.length === 0 ? <p style={muted}>Aucune pénalité ne correspond à la sélection.</p> : <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900, fontSize: 13 }}><thead><tr>{["Date","Apprenant / personne","Formation","Motif","Dû","Réglé","Reste","Statut reçu"].map((label)=><th key={label} style={{ padding: 11, textAlign: "left", borderBottom: "1px solid #dce4ef", color: "#53657c" }}>{label}</th>)}</tr></thead><tbody>{penaltyDetails.map((item)=><tr key={item.id}><td style={{ padding: 11, borderBottom: "1px solid #edf1f6", whiteSpace: "nowrap" }}>{new Date(item.created_at).toLocaleDateString("fr-FR",{timeZone:"Africa/Porto-Novo"})}</td><td style={{ padding: 11, borderBottom: "1px solid #edf1f6", fontWeight: 700 }}>{item.personName}</td><td style={{ padding: 11, borderBottom: "1px solid #edf1f6" }}>{item.formationName}</td><td style={{ padding: 11, borderBottom: "1px solid #edf1f6" }}>{item.penalty_type || item.description || "Pénalité"}</td><td style={{ padding: 11, borderBottom: "1px solid #edf1f6" }}>{money(Number(item.amount_fcfa || 0))}</td><td style={{ padding: 11, borderBottom: "1px solid #edf1f6", color: "#17633a" }}>{money(item.paid)}</td><td style={{ padding: 11, borderBottom: "1px solid #edf1f6", color: item.outstanding ? "#9a2727" : "#17633a", fontWeight: 700 }}>{money(item.outstanding)}</td><td style={{ padding: 11, borderBottom: "1px solid #edf1f6" }}>{item.outstanding === 0 ? ("Régularisé" + (item.lastPayment?.receipt_number ? " · " + item.lastPayment.receipt_number : "")) : "À régler"}</td></tr>)}</tbody></table></div>}
       </section>
       <section style={panel}><h2 style={{ margin: "0 0 8px", fontSize: 18 }}>Comment lire ces chiffres</h2><p style={muted}>Un paiement est considéré comme réglé uniquement si le paiement lié à la pénalité est validé par le secrétariat, ou si la pénalité porte déjà le statut « payé ». Les paiements ordinaires sans lien avec une pénalité ne sont pas ajoutés au total des pénalités.</p></section>
     </div>
