@@ -1187,7 +1187,7 @@ export default function Home() {
     <section className="main-area">
       <header className="topbar"><div style={{display:"flex",alignItems:"center",gap:12}}><button className="btn mobile-menu" onClick={()=>setMobileNav(!mobileNav)}>☰</button><div><div className="breadcrumb">Aéro Service / {activeModule.label}</div><div className="topbar-title">{activeModule.label}</div></div></div><div className="top-actions"><button className="icon-btn" title="Actualiser" onClick={()=>{void loadCounts();if(active!=="dashboard"&&active!=="settings")void loadRows(active);}}>↻</button><div className="user-chip"><div className="avatar">{initials(fullName)}</div><div className="user-meta"><div className="user-name">{fullName}</div><div className="user-role">{roles.map(r=>r.name).join(" · ")||"Compte connecté"}</div></div></div><button className="btn" onClick={handleSignOut}>Déconnexion</button></div></header>
       <main className="content">
-        <section className="offline-draft-panel" style={{marginBottom:16,padding:14,border:"1px solid #d8e1ec",borderRadius:12,background:"#f7f9fc"}} aria-live="polite">
+        {active==="settings" && <section className="offline-draft-panel" style={{marginBottom:16,padding:14,border:"1px solid #d8e1ec",borderRadius:12,background:"#f7f9fc"}} aria-live="polite">
           <strong>Brouillon de travail sur cet appareil</strong>
           <p style={{margin:"6px 0",fontSize:13}}>Les champs opérationnels sont sauvegardés localement pour éviter de les perdre si la connexion coupe. Ils ne sont jamais envoyés automatiquement et ne constituent ni une inscription validée, ni un paiement reçu, ni une décision officielle. Les mots de passe et les champs de création de compte sont exclus. Le stockage du navigateur n’est pas chiffré : sur un ordinateur partagé, effacez le brouillon après usage.</p>
           <p style={{margin:"6px 0",fontSize:12,color:"#475569"}}>{offlineDraftSavedAt ? `Dernière sauvegarde locale : ${new Date(offlineDraftSavedAt).toLocaleString("fr-FR")}` : "Aucun brouillon opérationnel sauvegardé pour le moment."}{offlineDraftRestored ? " · Brouillon précédent restauré." : ""}</p>
@@ -1195,7 +1195,7 @@ export default function Home() {
             <button type="button" className="btn secondary" onClick={exportOfflineOperationalDraft} disabled={!offlineDraftSavedAt} >Exporter une copie JSON</button>
             <button type="button" className="btn secondary" onClick={clearOfflineOperationalDraft} disabled={!offlineDraftSavedAt && !offlineDraftRestored}>Effacer le brouillon local</button>
           </div>
-        </section>
+        </section>}
         {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
         {active==="dashboard" && <>
           <div className="page-heading"><div><div className="eyebrow">ESPACE PERSONNEL · {roleLabel.toUpperCase()}</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">{isAdmin ? "Vue globale de l’établissement et accès aux fonctions administratives." : isSecretary ? "Espace secrétariat : inscriptions, suivi des paiements et validation des accès apprenants." : isLearner ? "Votre espace apprenant personnel." : "Retrouvez les outils correspondant à votre fonction."}</p></div></div>
