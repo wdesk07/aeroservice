@@ -94,7 +94,7 @@ self.addEventListener("fetch", (event) => {
         const exact = await cache.match(url.pathname);
         if (exact) return exact;
         return (await cache.match(OFFLINE_URL)) || new Response(
-          "<!doctype html><html lang=\\"fr\\"><meta charset=\\"utf-8\\"><meta name=\\"viewport\\" content=\\"width=device-width,initial-scale=1\\"><title>Aéro Service hors connexion</title><body style=\\"font:16px Arial;padding:24px;color:#15243a\\"><h1>Aéro Service — hors connexion</h1><p>Internet est indisponible. Les données serveur ne sont pas actualisées. Les opérations officielles nécessitant le serveur sont suspendues. Utilisez la procédure de secours validée par la Direction.</p><p><a href=\\"/offline.html\\">Ouvrir le carnet de secours hors connexion</a></p></body></html>",
+          "<!doctype html><html lang='fr'><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Aéro Service hors connexion</title><body style='font:16px Arial;padding:24px;color:#15243a'><h1>Aéro Service — hors connexion</h1><p>Internet est indisponible. Les données serveur ne sont pas actualisées. Les opérations officielles nécessitant le serveur sont suspendues. Utilisez la procédure de secours validée par la Direction.</p><p><a href='/offline.html'>Ouvrir le carnet de secours hors connexion</a></p></body></html>",
           { headers: { "Content-Type": "text/html; charset=utf-8" }, status: 503 }
         );
       }
