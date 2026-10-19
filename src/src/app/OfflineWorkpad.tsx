@@ -1,0 +1,150 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+type OfflineWorkItem = {
+  id: string;
+  category: string;
+  reference: string;
+  details: string;
+  amount: string;
+  createdAt: string;
+};
+
+const STORAGE_KEY = "aero_offline_workpad_v1";
+const categories = [
+  "Inscription / dossier",
+  "Paiement à vérifier",
+  "Validation à effectuer",
+  "Présence / retard / absence",
+  "Pénalité à examiner",
+  "Formation / planning",
+  "Suivi / alerte",
+  "Autre opération",
+];
+
+export default function OfflineWorkpad() {
+  const [online, setOnline] = useState(true);
+  const [items, setItems] = useState<OfflineWorkItem[]>([]);
+  const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState(categories[0]);
+  const [reference, setReference] = useState("");
+  const [details, setDetails] = useState("");
+  const [amount, setAmount] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const refresh = () => setOnline(navigator.onLine);
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("offline", refresh);
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setItems(parsed);
+      }
+    } catch { /* Keep the workpad usable if local storage is unavailable. */ }
+    return () => {
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("offline", refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {
+      setMessage("Le navigateur n’a pas pu conserver les notes. Exportez-les ou utilisez aussi un registre papier.");
+    }
+  }, [items]);
+
+  function saveItem(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (details.trim().length < 3) {
+      setMessage("Décrivez l’opération à reprendre.");
+      return;
+    }
+    const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+    const item: OfflineWorkItem = {
+      id,
+      category,
+      reference: reference.trim(),
+      details: details.trim(),
+      amount: amount.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    setItems((current) => [item, ...current]);
+    setReference("");
+    setDetails("");
+    setAmount("");
+    setMessage("Note conservée sur cet appareil. Aucune inscription, aucun paiement ni aucune validation n’a été envoyé au serveur.");
+  }
+
+  function exportItems() {
+    if (items.length === 0) {
+      setMessage("Aucune note à exporter.");
+      return;
+    }
+    const csvCell = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+    const headers = ["Type d’opération", "Référence", "Détails à reprendre", "Montant indicatif", "Créé le", "ID local"];
+    const rows = items.map((item) => [item.category, item.reference, item.details, item.amount, item.createdAt, item.id]);
+    const csv = "\uFEFF" + [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "aero-service-carnet-hors-connexion.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage("Export réalisé. Le fichier peut contenir des données personnelles : gardez-le en lieu sûr.");
+  }
+
+  return (
+    <aside style={{ position: "fixed", zIndex: 1000, right: 14, bottom: 14, width: "min(390px, calc(100vw - 28px))", fontFamily: "inherit", color: "#17324d" }}>
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
+        style={{ display: "block", marginLeft: "auto", border: "1px solid #9fb6cc", borderRadius: 999, background: online ? "#123b63" : "#8a5700", color: "white", padding: "10px 15px", fontWeight: 700, boxShadow: "0 3px 14px #0002", cursor: "pointer" }}>
+        {online ? "Carnet de reprise" : "Carnet hors connexion"}{items.length ? " (" + items.length + ")" : ""}
+      </button>
+      {open && <section style={{ marginTop: 8, maxHeight: "min(72vh, 650px)", overflowY: "auto", background: "#fff", border: "1px solid #b7c8d8", borderRadius: 14, padding: 14, boxShadow: "0 8px 30px #0003" }}>
+        <h2 style={{ margin: "0 0 6px", fontSize: 17 }}>Carnet de reprise Aéro Service</h2>
+        <p style={{ fontSize: 12, lineHeight: 1.45, marginTop: 0, color: "#5c440f" }}>
+          {online ? "Pour noter les opérations à reprendre ou vérifier après une panne." : "Mode hors connexion : notez le travail à reprendre."}
+          {" "}Ces notes restent dans ce navigateur ; elles ne sont pas envoyées automatiquement au serveur.
+        </p>
+        <form onSubmit={saveItem} style={{ display: "grid", gap: 8 }}>
+          <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Type d’opération
+            <select value={category} onChange={(event) => setCategory(event.target.value)} style={{ width: "100%", padding: 8, border: "1px solid #b7c8d8", borderRadius: 7, background: "white" }}>
+              {categories.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Référence / matricule (facultatif)
+            <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={120} style={{ width: "100%", padding: 8, border: "1px solid #b7c8d8", borderRadius: 7 }} />
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Détails à reprendre
+            <textarea value={details} onChange={(event) => setDetails(event.target.value)} required minLength={3} maxLength={1500} rows={3} style={{ width: "100%", padding: 8, border: "1px solid #b7c8d8", borderRadius: 7, resize: "vertical" }} placeholder="Ex. dossier reçu, contrôler les pièces puis finaliser l’inscription." />
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Montant indicatif (facultatif)
+            <input value={amount} onChange={(event) => setAmount(event.target.value)} maxLength={40} style={{ width: "100%", padding: 8, border: "1px solid #b7c8d8", borderRadius: 7 }} placeholder="Ex. 15 000 FCFA — non validé" />
+          </label>
+          <button type="submit" style={{ border: 0, borderRadius: 8, padding: 10, background: "#123b63", color: "white", fontWeight: 700, cursor: "pointer" }}>Conserver la note sur cet appareil</button>
+        </form>
+        {message && <p role="status" style={{ fontSize: 12, lineHeight: 1.4 }}>{message}</p>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "10px 0" }}>
+          <button type="button" onClick={exportItems} disabled={!items.length} style={{ padding: "7px 9px", border: "1px solid #9fb6cc", borderRadius: 7, background: "white", cursor: "pointer" }}>Exporter CSV</button>
+          <button type="button" onClick={() => { if (items.length && window.confirm("Supprimer toutes les notes locales de ce navigateur ? Vérifiez d’abord vos exports.")) { setItems([]); setMessage("Carnet local vidé."); } }} disabled={!items.length} style={{ padding: "7px 9px", border: "1px solid #d6a3a3", borderRadius: 7, background: "white", color: "#8f2020", cursor: "pointer" }}>Effacer le carnet</button>
+        </div>
+        <p style={{ fontSize: 11, lineHeight: 1.4, color: "#6c4a16" }}>Confidentialité : les notes sont stockées localement sans chiffrement dans le navigateur. Sur un ordinateur partagé, évitez les informations sensibles, exportez ce qui est nécessaire et effacez le carnet après régularisation. En cas de panne, gardez aussi un registre papier.</p>
+        {items.length > 0 && <ol style={{ paddingLeft: 20, fontSize: 12, lineHeight: 1.45 }}>
+          {items.slice(0, 12).map((item) => <li key={item.id} style={{ marginBottom: 8 }}>
+            <strong>{item.category}</strong>{item.reference ? " — " + item.reference : ""}
+            <div>{item.details}</div>
+            {item.amount && <div>Montant indicatif : {item.amount}</div>}
+            <div style={{ color: "#63778a" }}>{new Date(item.createdAt).toLocaleString("fr-FR")}</div>
+            <button type="button" onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))} style={{ marginTop: 3, border: 0, background: "transparent", color: "#8f2020", padding: 0, cursor: "pointer" }}>Supprimer cette note</button>
+          </li>)}
+          {items.length > 12 && <li>Les {items.length - 12} autres notes sont également conservées et seront incluses dans l’export.</li>}
+        </ol>}
+      </section>}
+    </aside>
+  );
+}
