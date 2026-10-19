@@ -173,7 +173,10 @@ export default function PresenceKioskPage() {
     }
     const eventId = typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
-      : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+          const random = Math.random() * 16 | 0;
+          return (character === "x" ? random : (random & 0x3 | 0x8)).toString(16);
+        });
     const entry: OfflineBackupEvent = {
       client_event_id: eventId,
       person_identifier: identifierValue,
