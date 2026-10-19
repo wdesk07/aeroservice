@@ -246,7 +246,7 @@ export default function PresenceKioskPage() {
     if (online && user && canManageOperatingDay && offlineEvents.length > 0 && !syncingOffline) {
       void syncOfflineObservations();
     }
-  }, [online, user, canManageOperatingDay, offlineEvents.length]);
+  }, [online, user, canManageOperatingDay, offlineEvents.length, syncingOffline]);
 
   async function activateKiosk() {
     setBusy(true);
