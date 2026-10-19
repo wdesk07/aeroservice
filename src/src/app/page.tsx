@@ -8,6 +8,21 @@ const supabase: SupabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 );
 
+
+const OFFLINE_SNAPSHOT_MAX_AGE = 24 * 60 * 60 * 1000;
+function saveOfflineSnapshot(userId: string, key: string, value: unknown) {
+  try { localStorage.setItem(`aero_snapshot_${userId}_${key}`, JSON.stringify({ savedAt: Date.now(), value })); } catch {}
+}
+function readOfflineSnapshot<T>(userId: string, key: string): T | null {
+  try {
+    const raw = localStorage.getItem(`aero_snapshot_${userId}_${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || Date.now() - Number(parsed.savedAt) > OFFLINE_SNAPSHOT_MAX_AGE) return null;
+    return parsed.value as T;
+  } catch { return null; }
+}
+
 type Profile = { id: string; public_id?: string | null; first_name?: string | null; last_name?: string | null; display_name?: string | null; email?: string | null; status?: string };
 type AccountFormation = { id: string; code?: string | null; name?: string | null; status?: string | null };
 type Role = { code: string; name: string };
@@ -137,12 +152,30 @@ export default function Home() {
     // Secure server-side lookup avoids the profile/formation RLS read failure in the learner workspace.
     const { data: accountData, error: accountError } = await supabase.functions.invoke("my-account-status");
     if (!accountError && accountData) {
-      setProfile((accountData.profile as Profile | null) ?? null);
-      setRoles((accountData.roles ?? []) as Role[]);
-      setAccountFormation((accountData.formation as AccountFormation | null) ?? null);
-      setStudentNumber(typeof accountData.student_number === "string" ? accountData.student_number : null);
+      const identitySnapshot = {
+        profile: (accountData.profile as Profile | null) ?? null,
+        roles: (accountData.roles ?? []) as Role[],
+        formation: (accountData.formation as AccountFormation | null) ?? null,
+        studentNumber: typeof accountData.student_number === "string" ? accountData.student_number : null,
+      };
+      saveOfflineSnapshot(current.id, "identity", identitySnapshot);
+      setProfile(identitySnapshot.profile);
+      setRoles(identitySnapshot.roles);
+      setAccountFormation(identitySnapshot.formation);
+      setStudentNumber(identitySnapshot.studentNumber);
       setIdentityReady(true);
       return;
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cached = readOfflineSnapshot<{profile: Profile | null; roles: Role[]; formation: AccountFormation | null; studentNumber: string | null}>(current.id, "identity");
+      if (cached) {
+        setProfile(cached.profile);
+        setRoles(cached.roles);
+        setAccountFormation(cached.formation);
+        setStudentNumber(cached.studentNumber);
+        setIdentityReady(true);
+        return;
+      }
     }
     // Safe fallback for environments where the account-status function has not yet been deployed.
     const [{ data: p }, { data: r }] = await Promise.all([
@@ -169,6 +202,18 @@ export default function Home() {
     if (!canAccessModule(key, roles.map(role => role.code))) {
       setRows([]); setError("Accès refusé : ce module n’est pas autorisé pour votre rôle."); setLoading(false); return;
     }
+    if (user && typeof navigator !== "undefined" && !navigator.onLine) {
+      const cachedRows = readOfflineSnapshot<Record<string, unknown>[]>(user.id, `module_${key}`);
+      if (cachedRows) {
+        setRows(cachedRows);
+        setError("Mode hors connexion : affichage d’une copie locale pouvant dater de 24 heures. Consultation uniquement ; aucune modification n’est confirmée.");
+      } else {
+        setRows([]);
+        setError("Mode hors connexion : aucune copie locale disponible pour ce module. Reconnectez-vous pour charger les données.");
+      }
+      setLoading(false);
+      return;
+    }
     if (key === "justifications" || key === "students" || key === "staff") {
       setLoading(true); setError("");
       const rpcName = key === "justifications" ? "list_absence_justifications" : key === "students" ? "list_students_directory" : "list_staff_directory";
@@ -181,7 +226,9 @@ export default function Home() {
             ? "Impossible de charger les apprenants. Vérifiez les autorisations du répertoire et des profils sur TEST."
             : "Impossible de charger le personnel. Vérifiez les autorisations du répertoire et des profils sur TEST.");
       } else {
-        setRows((data ?? []) as unknown as Record<string, unknown>[]);
+        const snapshot = (data ?? []) as unknown as Record<string, unknown>[];
+        if (user) saveOfflineSnapshot(user.id, `module_${key}`, snapshot);
+        setRows(snapshot);
       }
       setLoading(false); return;
     }
@@ -206,6 +253,7 @@ export default function Home() {
           penalty_amount_fcfa: null,
           penalty_status: null
         }));
+        if (user) saveOfflineSnapshot(user.id, `module_${key}`, mapped);
         setRows(mapped);
         setLoading(false);
         return;
@@ -220,9 +268,13 @@ export default function Home() {
     if (result.error) {
       setRows([]);
       setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
-    } else setRows((result.data ?? []) as unknown as Record<string, unknown>[]);
+    } else {
+      const snapshot = (result.data ?? []) as unknown as Record<string, unknown>[];
+      if (user) saveOfflineSnapshot(user.id, `module_${key}`, snapshot);
+      setRows(snapshot);
+    }
     setLoading(false);
-  }, [roles]);
+  }, [roles, user]);
 
   useEffect(() => {
     if (!user || !roles.some(role => ["ACCOUNTING", "FINANCE"].includes(role.code.toUpperCase()))) {
