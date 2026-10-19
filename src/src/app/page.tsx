@@ -310,8 +310,14 @@ export default function Home() {
       return [item.table, result.error ? null : (result.count ?? 0)] as const;
     }));
     const nextCounts = Object.fromEntries(entries) as Record<string, number | null>;
+    const cachedCounts = user ? readOfflineSnapshot<Record<string, number | null>>(user.id, "dashboard_counts") : null;
+    for (const item of metrics) {
+      if (nextCounts[item.table] === null && cachedCounts && cachedCounts[item.table] !== undefined) {
+        nextCounts[item.table] = cachedCounts[item.table];
+      }
+    }
     setCounts(nextCounts);
-    if (user) saveOfflineSnapshot(user.id, "dashboard_counts", nextCounts);
+    if (user && entries.some(([, value]) => value !== null)) saveOfflineSnapshot(user.id, "dashboard_counts", nextCounts);
   }, [user]);
 
   const loadRows = useCallback(async (key: ModuleKey) => {
@@ -335,12 +341,18 @@ export default function Home() {
       const rpcName = key === "justifications" ? "list_absence_justifications" : key === "students" ? "list_students_directory" : "list_staff_directory";
       const { data, error: rpcError } = await supabase.rpc(rpcName);
       if (rpcError) {
-        setRows([]);
-        setError(key === "justifications"
-          ? "Impossible de charger les justificatifs. Le workflow d’absence doit être installé sur la base TEST."
-          : key === "students"
-            ? "Impossible de charger les apprenants. Vérifiez les autorisations du répertoire et des profils sur TEST."
-            : "Impossible de charger le personnel. Vérifiez les autorisations du répertoire et des profils sur TEST.");
+        const cachedRows = user ? readOfflineSnapshot<Record<string, unknown>[]>(user.id, `module_${key}`) : null;
+        if (cachedRows) {
+          setRows(cachedRows);
+          setError("Le serveur ne répond pas correctement : copie locale affichée (elle peut dater de 24 heures). Consultation uniquement ; aucune modification n’est confirmée.");
+        } else {
+          setRows([]);
+          setError(key === "justifications"
+            ? "Impossible de charger les justificatifs. Le workflow d’absence doit être installé sur la base TEST."
+            : key === "students"
+              ? "Impossible de charger les apprenants. Vérifiez les autorisations du répertoire et des profils sur TEST."
+              : "Impossible de charger le personnel. Vérifiez les autorisations du répertoire et des profils sur TEST.");
+        }
       } else {
         const snapshot = (data ?? []) as unknown as Record<string, unknown>[];
         if (user) saveOfflineSnapshot(user.id, `module_${key}`, snapshot);
@@ -382,8 +394,14 @@ export default function Home() {
       }
     }
     if (result.error) {
-      setRows([]);
-      setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
+      const cachedRows = user ? readOfflineSnapshot<Record<string, unknown>[]>(user.id, `module_${key}`) : null;
+      if (cachedRows) {
+        setRows(cachedRows);
+        setError("Le serveur ne répond pas correctement : copie locale affichée (elle peut dater de 24 heures). Consultation uniquement ; aucune modification n’est confirmée.");
+      } else {
+        setRows([]);
+        setError("Impossible de charger ce module avec les autorisations actuelles. Vérifiez les politiques d’accès Supabase (RLS) pour votre rôle.");
+      }
     } else {
       const snapshot = (result.data ?? []) as unknown as Record<string, unknown>[];
       if (user) saveOfflineSnapshot(user.id, `module_${key}`, snapshot);
