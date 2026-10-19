@@ -19,12 +19,11 @@ type AgendaEvent = {
   reminder_at: string | null;
 };
 
-const dateLabel = (value: string) =>
-  new Date(value).toLocaleString("fr-FR", {
-    timeZone: "Africa/Porto-Novo",
-    dateStyle: "full",
-    timeStyle: "short",
-  });
+const dateLabel = (value: string) => new Date(value).toLocaleString("fr-FR", {
+  timeZone: "Africa/Porto-Novo",
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 
 export default function AgendaHomeReminder() {
   const pathname = usePathname();
@@ -38,12 +37,10 @@ export default function AgendaHomeReminder() {
       if (pathname !== "/") { setEvents([]); setLoaded(true); return; }
       const { data: sessionData } = await supabase.auth.getSession();
       const user = sessionData.session?.user;
-      if (!user) { setEvents([]); setLoaded(true); return; }
+      if (!user) { if (!cancelled) { setEvents([]); setLoaded(true); } return; }
 
       const { data: roleRows, error: roleError } = await supabase
-        .from("user_roles")
-        .select("roles(code)")
-        .eq("user_id", user.id);
+        .from("user_roles").select("roles(code)").eq("user_id", user.id);
       const codes = (roleRows ?? []).flatMap((item: any) =>
         Array.isArray(item.roles) ? item.roles : item.roles ? [item.roles] : []
       ).map((role: any) => String(role.code ?? "").toUpperCase());
@@ -52,32 +49,25 @@ export default function AgendaHomeReminder() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("director_agenda_events")
+      const { data, error } = await supabase.from("director_agenda_events")
         .select("id,title,event_type,description,starts_at,ends_at,reminder_at")
         .gte("starts_at", new Date().toISOString())
-        .order("starts_at", { ascending: true })
-        .limit(20);
+        .order("starts_at", { ascending: true }).limit(20);
 
-      if (!cancelled) {
-        if (error) setEvents([]);
-        else {
-          const now = Date.now();
-          const upcoming = ((data ?? []) as AgendaEvent[]).filter((event) => {
-            const start = new Date(event.starts_at).getTime();
-            const reminderDue = !!event.reminder_at && new Date(event.reminder_at).getTime() <= now;
-            const startsSoon = start - now <= 7 * 24 * 60 * 60 * 1000;
-            return reminderDue || startsSoon;
-          });
-          setEvents(upcoming);
-        }
-        setLoaded(true);
+      if (cancelled) return;
+      if (error) setEvents([]);
+      else {
+        const now = Date.now();
+        setEvents(((data ?? []) as AgendaEvent[]).filter((event) => {
+          const start = new Date(event.starts_at).getTime();
+          const reminderDue = !!event.reminder_at && new Date(event.reminder_at).getTime() <= now;
+          return reminderDue || start - now <= 7 * 24 * 60 * 60 * 1000;
+        }));
       }
+      setLoaded(true);
     }
     void loadReminders();
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
-      void loadReminders();
-    });
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => { void loadReminders(); });
     window.addEventListener("focus", loadReminders);
     return () => {
       cancelled = true;
@@ -91,31 +81,33 @@ export default function AgendaHomeReminder() {
   if (visible.length === 0) return null;
 
   return (
-    <aside aria-label="Rappels de l’agenda" style={{ maxWidth: 1180, margin: "0 auto 18px", padding: "0 20px" }}>
-      <section style={{ border: "2px solid #e4b64e", borderRadius: 15, padding: 18, background: "#fff8e7", color: "#573d08", boxShadow: "0 5px 20px rgba(70,48,5,.08)" }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
-          <span aria-hidden="true" style={{ fontSize: 27 }}>🔔</span>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 20 }}>Rappel important — votre planning</h2>
-            <p style={{ margin: "4px 0 0", fontSize: 13 }}>Ces événements à venir sont affichés automatiquement à votre arrivée sur l’accueil.</p>
-          </div>
+    <section aria-label="Rappels de l’agenda" style={{ margin: "0 0 22px", padding: "0 0 2px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+        <div>
+          <div style={{ color: "#60738b", fontSize: 11, fontWeight: 800, letterSpacing: 1.25, textTransform: "uppercase" }}>Agenda · À retenir</div>
+          <h2 style={{ margin: "4px 0 0", color: "#173b63", fontSize: 18, fontWeight: 750, letterSpacing: "-.2px" }}>Prochains rendez-vous</h2>
         </div>
-        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-          {visible.map((event) => {
-            const reminderDue = !!event.reminder_at && new Date(event.reminder_at).getTime() <= Date.now();
-            return <article key={event.id} style={{ background: "#fff", border: "1px solid #eed89e", borderRadius: 10, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 260px" }}>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>{event.title}</div>
-                <div style={{ marginTop: 5, fontSize: 13 }}>{dateLabel(event.starts_at)}{event.ends_at ? " · Fin : " + dateLabel(event.ends_at) : ""}</div>
-                {event.description && <p style={{ margin: "6px 0 0", fontSize: 13, whiteSpace: "pre-wrap" }}>{event.description}</p>}
-                {reminderDue && <div style={{ marginTop: 7, fontSize: 12, fontWeight: 800, color: "#a33b16" }}>Le moment du rappel est arrivé.</div>}
+        <a href="/direction/agenda" style={{ color: "#174ea6", fontSize: 13, fontWeight: 700, textDecoration: "none" }}>Voir l’Agenda →</a>
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {visible.map((event) => {
+          const reminderDue = !!event.reminder_at && new Date(event.reminder_at).getTime() <= Date.now();
+          return (
+            <article key={event.id} style={{ display: "grid", gridTemplateColumns: "4px minmax(0,1fr) auto", gap: 14, alignItems: "stretch", padding: "14px 16px", border: "1px solid #dce5ef", borderRadius: 12, background: "#fff", boxShadow: "0 2px 8px rgba(23,59,99,.035)" }}>
+              <div aria-hidden="true" style={{ background: reminderDue ? "#c28a28" : "#2c659b", borderRadius: 8 }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <strong style={{ color: "#1b2f46", fontSize: 14 }}>{event.title}</strong>
+                  {reminderDue && <span style={{ color: "#805719", background: "#f7f0e2", borderRadius: 5, padding: "3px 6px", fontSize: 10, fontWeight: 800 }}>RAPPEL</span>}
+                </div>
+                <div style={{ marginTop: 5, color: "#536a82", fontSize: 12 }}>{dateLabel(event.starts_at)}{event.ends_at ? " · Fin : " + dateLabel(event.ends_at) : ""}</div>
+                {event.description && <p style={{ margin: "6px 0 0", color: "#52657a", fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{event.description}</p>}
               </div>
-              <button type="button" onClick={() => setDismissed((old) => [...old, event.id])} style={{ border: "1px solid #d8c38b", borderRadius: 8, padding: "7px 10px", background: "#fffdf7", color: "#573d08", fontWeight: 700, cursor: "pointer" }}>J’ai vu ce rappel</button>
-            </article>;
-          })}
-        </div>
-        <div style={{ marginTop: 12 }}><a href="/direction/agenda" style={{ color: "#174ea6", fontWeight: 800 }}>Ouvrir l’Agenda →</a></div>
-      </section>
-    </aside>
+              <button type="button" aria-label="Masquer ce rappel" onClick={() => setDismissed((old) => [...old, event.id])} style={{ alignSelf: "center", border: "1px solid #d8e1eb", borderRadius: 8, padding: "7px 10px", background: "#f8fafc", color: "#536a82", fontSize: 12, fontWeight: 650, cursor: "pointer", whiteSpace: "nowrap" }}>Compris</button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
