@@ -9,6 +9,7 @@ type OfflineWorkItem = {
   details: string;
   amount: string;
   createdAt: string;
+  status?: "À reprendre" | "En cours" | "Terminé";
 };
 
 const STORAGE_KEY = "aero_offline_workpad_v1";
@@ -32,6 +33,7 @@ export default function OfflineWorkpad() {
   const [details, setDetails] = useState("");
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState("");
+  const [filter, setFilter] = useState<"Toutes" | "À reprendre" | "En cours" | "Terminé">("Toutes");
 
   useEffect(() => {
     const refresh = () => setOnline(navigator.onLine);
@@ -73,6 +75,7 @@ export default function OfflineWorkpad() {
       details: details.trim(),
       amount: amount.trim(),
       createdAt: new Date().toISOString(),
+      status: "À reprendre",
     };
     setItems((current) => [item, ...current]);
     setReference("");
@@ -87,8 +90,8 @@ export default function OfflineWorkpad() {
       return;
     }
     const csvCell = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
-    const headers = ["Type d’opération", "Référence", "Détails à reprendre", "Montant indicatif", "Créé le", "ID local"];
-    const rows = items.map((item) => [item.category, item.reference, item.details, item.amount, item.createdAt, item.id]);
+    const headers = ["Type d’opération", "Référence", "Détails à reprendre", "Montant indicatif", "Statut de reprise", "Créé le", "ID local"];
+    const rows = items.map((item) => [item.category, item.reference, item.details, item.amount, item.status || "À reprendre", item.createdAt, item.id]);
     const csv = "\uFEFF" + [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -134,16 +137,32 @@ export default function OfflineWorkpad() {
           <button type="button" onClick={() => { if (items.length && window.confirm("Supprimer toutes les notes locales de ce navigateur ? Vérifiez d’abord vos exports.")) { setItems([]); setMessage("Carnet local vidé."); } }} disabled={!items.length} style={{ padding: "7px 9px", border: "1px solid #d6a3a3", borderRadius: 7, background: "white", color: "#8f2020", cursor: "pointer" }}>Effacer le carnet</button>
         </div>
         <p style={{ fontSize: 11, lineHeight: 1.4, color: "#6c4a16" }}>Confidentialité : les notes sont stockées localement sans chiffrement dans le navigateur. Sur un ordinateur partagé, évitez les informations sensibles, exportez ce qui est nécessaire et effacez le carnet après régularisation. En cas de panne, gardez aussi un registre papier.</p>
-        {items.length > 0 && <ol style={{ paddingLeft: 20, fontSize: 12, lineHeight: 1.45 }}>
-          {items.slice(0, 12).map((item) => <li key={item.id} style={{ marginBottom: 8 }}>
-            <strong>{item.category}</strong>{item.reference ? " — " + item.reference : ""}
-            <div>{item.details}</div>
-            {item.amount && <div>Montant indicatif : {item.amount}</div>}
-            <div style={{ color: "#63778a" }}>{new Date(item.createdAt).toLocaleString("fr-FR")}</div>
-            <button type="button" onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))} style={{ marginTop: 3, border: 0, background: "transparent", color: "#8f2020", padding: 0, cursor: "pointer" }}>Supprimer cette note</button>
-          </li>)}
-          {items.length > 12 && <li>Les {items.length - 12} autres notes sont également conservées et seront incluses dans l’export.</li>}
-        </ol>}
+        {items.length > 0 && <>
+          <label style={{ display: "grid", gap: 4, fontSize: 13, margin: "10px 0" }}>Filtrer le suivi
+            <select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)} style={{ width: "100%", padding: 8, border: "1px solid #b7c8d8", borderRadius: 7, background: "white" }}>
+              <option value="Toutes">Toutes les notes ({items.length})</option>
+              <option value="À reprendre">À reprendre ({items.filter((item) => (item.status || "À reprendre") === "À reprendre").length})</option>
+              <option value="En cours">En cours ({items.filter((item) => item.status === "En cours").length})</option>
+              <option value="Terminé">Terminées ({items.filter((item) => item.status === "Terminé").length})</option>
+            </select>
+          </label>
+          <ol style={{ paddingLeft: 20, fontSize: 12, lineHeight: 1.45 }}>
+            {items.filter((item) => filter === "Toutes" || (item.status || "À reprendre") === filter).slice(0, 20).map((item) => <li key={item.id} style={{ marginBottom: 10 }}>
+              <strong>{item.category}</strong>{item.reference ? " — " + item.reference : ""}
+              <div>{item.details}</div>
+              {item.amount && <div>Montant indicatif : {item.amount}</div>}
+              <div style={{ color: "#63778a" }}>{new Date(item.createdAt).toLocaleString("fr-FR")}</div>
+              <label style={{ display: "grid", gap: 4, marginTop: 5 }}>État de reprise
+                <select value={item.status || "À reprendre"} onChange={(event) => setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: event.target.value as OfflineWorkItem["status"] } : entry))} style={{ width: "100%", padding: 7, border: "1px solid #b7c8d8", borderRadius: 7, background: "white" }}>
+                  <option>À reprendre</option><option>En cours</option><option>Terminé</option>
+                </select>
+              </label>
+              {item.status === "Terminé" && <p style={{ margin: "4px 0", color: "#17663b" }}>Note clôturée localement — cela ne confirme pas la validation dans Aéro Service.</p>}
+              <button type="button" onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))} style={{ marginTop: 3, border: 0, background: "transparent", color: "#8f2020", padding: 0, cursor: "pointer" }}>Supprimer cette note</button>
+            </li>)}
+          </ol>
+          {items.filter((item) => filter === "Toutes" || (item.status || "À reprendre") === filter).length > 20 && <p>Seules les 20 premières notes de ce filtre sont affichées ; l’export CSV contient toutes les notes.</p>}
+        </>}
       </section>}
     </aside>
   );
