@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export default function OfflineStatus() {
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
+  const [workNotes, setWorkNotes] = useState(0);
 
   useEffect(() => {
     const update = () => {
@@ -12,7 +13,9 @@ export default function OfflineStatus() {
       try {
         const events = JSON.parse(localStorage.getItem("aero_offline_attendance_queue") || "[]");
         setPending(Array.isArray(events) ? events.length : 0);
-      } catch { setPending(0); }
+        const notes = JSON.parse(localStorage.getItem("aero_offline_workpad_v1") || "[]");
+        setWorkNotes(Array.isArray(notes) ? notes.length : 0);
+      } catch { setPending(0); setWorkNotes(0); }
     };
     update();
     window.addEventListener("online", update);
@@ -26,7 +29,7 @@ export default function OfflineStatus() {
     };
   }, []);
 
-  if (online && pending === 0) return null;
+  if (online && pending === 0 && workNotes === 0) return null;
   return (
     <div role="status" aria-live="polite" style={{
       padding: "9px 14px", fontSize: 13, lineHeight: 1.45,
@@ -37,8 +40,8 @@ export default function OfflineStatus() {
       <strong>{online ? "Synchronisation à vérifier" : "Aéro Service — hors connexion"}</strong>
       {" — "}
       {online
-        ? pending + " observation(s) de présence en attente sur cet appareil."
-        : "Les données du serveur ne sont pas actualisées. Les opérations officielles nécessitant le serveur sont suspendues."}
+        ? pending + " observation(s) de présence à synchroniser et " + workNotes + " note(s) de reprise conservée(s) localement. Les notes ne sont pas envoyées au serveur."
+        : "Les données du serveur ne sont pas actualisées. " + pending + " observation(s) de présence et " + workNotes + " note(s) de reprise sont conservées localement ; les opérations officielles nécessitant le serveur sont suspendues."}
     </div>
   );
 }
