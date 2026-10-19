@@ -124,23 +124,28 @@ export default function DirectionSuiviPage() {
         const attached = Array.isArray(item.roles) ? item.roles : item.roles ? [item.roles] : [];
         roleMap.set(item.user_id, [...(roleMap.get(item.user_id) ?? []), ...attached.map((role: any) => String(role.code ?? "").toUpperCase())]);
       }
-      // Pour le bilan quotidien, ajouter les comptes actifs qui n’ont aucun pointage :
-      // ils apparaissent explicitement comme absents / non pointés, sans inventer d’heure d’arrivée.
-      if (period === "day") {
-        const alreadySeen = new Set(attendance.filter((row) => row.local_date === day).map((row) => row.person_id));
-        const activePeople = (profileRows ?? []) as Profile[];
-        const missing = activePeople.filter((p) => {
-          if (alreadySeen.has(p.id) || (p.status && !["active", "approved", "validated"].includes(p.status.toLowerCase()))) return false;
-          const codes = roleMap.get(p.id) ?? [];
-          return codes.some((code) => ["STUDENT", "APPRENANT", "STAFF", "PERSONNEL", "TEACHER", "ENSEIGNANT"].includes(code));
+      // N’afficher une absence synthétique que si une séance de formation planifiée
+      // confirme l’absence et qu’aucun pointage journalier n’existe pour cette personne ce jour-là.
+      // Ne jamais déclarer absent un apprenant simplement parce qu’il n’a pas de cours ce jour.
+      const seenDayPerson = new Set(attendance.map((row) => `${row.local_date}:${row.person_id}`));
+      const syntheticByDayPerson = new Map<string, Attendance>();
+      for (const session of ((perSession ?? []) as SessionAttendance[])) {
+        if (session.status.toLowerCase() !== "absent" || session.daily_attendance_id) continue;
+        const key = `${session.session_date}:${session.person_id}`;
+        if (seenDayPerson.has(key) || syntheticByDayPerson.has(key)) continue;
+        syntheticByDayPerson.set(key, {
+          id: `session-absent-${key}`,
+          person_id: session.person_id,
+          person_type: "student",
+          local_date: session.session_date,
+          nominal_time: session.nominal_time || session.planned_start || "",
+          cutoff_time: session.cutoff_time || "",
+          arrived_at: null,
+          status: "absent",
+          minutes_after_cutoff: 0
         });
-        const synthetic: Attendance[] = missing.map((p) => {
-          const codes = roleMap.get(p.id) ?? [];
-          const personType = codes.some((code) => ["STAFF", "PERSONNEL", "TEACHER", "ENSEIGNANT"].includes(code)) ? "staff" : "student";
-          return { id: `not-checked-${p.id}`, person_id: p.id, person_type: personType, local_date: day, nominal_time: "", cutoff_time: "", arrived_at: null, status: "absent", minutes_after_cutoff: 0 };
-        });
-        attendance = [...attendance, ...synthetic];
       }
+      attendance = [...attendance, ...syntheticByDayPerson.values()];
     }
     setProfiles(map);
     const formationNameById = new Map(((formationRows ?? []) as Formation[]).map((formation) => [formation.id, formation.name]));
