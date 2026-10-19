@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import OfflineStatus from "./OfflineStatus";
+import OfflineWorkpad from "./OfflineWorkpad";
 
 export const metadata: Metadata = {
   title: "Aéro Service | Gestion",
@@ -19,5 +20,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="fr"><body><OfflineStatus />{children}</body></html>;
+  return <html lang="fr"><body><OfflineStatus />{children}<OfflineWorkpad /></body></html>;
 }
