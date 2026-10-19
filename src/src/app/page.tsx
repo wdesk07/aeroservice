@@ -1125,7 +1125,7 @@ export default function Home() {
           <p style={{margin:"6px 0",fontSize:12,color:"#475569"}}>{offlineDraftSavedAt ? `Dernière sauvegarde locale : ${new Date(offlineDraftSavedAt).toLocaleString("fr-FR")}` : "Aucun brouillon opérationnel sauvegardé pour le moment."}{offlineDraftRestored ? " · Brouillon précédent restauré." : ""}</p>
           <button type="button" className="btn secondary" onClick={clearOfflineOperationalDraft} disabled={!offlineDraftSavedAt && !offlineDraftRestored} style={{marginTop:6}}>Effacer le brouillon local</button>
         </section>
-        {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>
+        {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
         {active==="dashboard" && <>
           <div className="page-heading"><div><div className="eyebrow">ESPACE PERSONNEL · {roleLabel.toUpperCase()}</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">{isAdmin ? "Vue globale de l’établissement et accès aux fonctions administratives." : isSecretary ? "Espace secrétariat : inscriptions, suivi des paiements et validation des accès apprenants." : isLearner ? "Votre espace apprenant personnel." : "Retrouvez les outils correspondant à votre fonction."}</p></div>{isAdmin && <button className="btn btn-primary" onClick={()=>{setActive("formations");setShowCreate(true);}}>＋ Nouvelle formation</button>}</div>
           {!isLearner && roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) && <div className="stats-grid">
