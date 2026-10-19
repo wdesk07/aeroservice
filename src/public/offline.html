@@ -46,7 +46,7 @@ function render(){
 }
 el("noteForm").addEventListener("submit",function(event){
  event.preventDefault();const details=el("details").value.trim();if(details.length<3){el("message").textContent="Décrivez l’opération à reprendre.";return}
- const id=crypto&&crypto.randomUUID?crypto.randomUUID():String(Date.now())+"-"+Math.random().toString(16).slice(2);
+ const id=typeof crypto!=="undefined"&&crypto.randomUUID?crypto.randomUUID():String(Date.now())+"-"+Math.random().toString(16).slice(2);
  const item={id,category:categories.includes(el("category").value)?el("category").value:"Autre opération",reference:el("reference").value.trim(),details,amount:el("amount").value.trim(),createdAt:new Date().toISOString(),status:"À reprendre"};
  const items=read();items.unshift(item);if(write(items)){el("noteForm").reset();el("message").textContent="Note conservée localement. Aucune opération officielle n’a été transmise.";render()}
 });
