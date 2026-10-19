@@ -20,6 +20,7 @@ type Attendance = {
   minutes_after_cutoff: number;
 };
 type Profile = { id: string; display_name: string | null; first_name: string | null; last_name: string | null; email: string | null; status?: string | null };
+type Formation = { id: string; name: string; code: string | null };
 type SessionAttendance = { id: string; person_id: string; display_name: string | null; first_name: string | null; last_name: string | null; student_number: string | null; session_id: string; session_date: string; formation_name: string | null; planned_start: string; planned_end: string; status: string; arrived_at: string | null; nominal_time: string; cutoff_time: string; minutes_after_cutoff: number; daily_attendance_id: string | null };
 
 const directorRoles = ["DIRECTOR", "ADMIN", "PRE_ADMIN"];
@@ -48,6 +49,8 @@ export default function DirectionSuiviPage() {
   const [rows, setRows] = useState<Attendance[]>([]);
   const [sessionRows, setSessionRows] = useState<SessionAttendance[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+  const [formations, setFormations] = useState<Formation[]>([]);
+  const [studentFormationNames, setStudentFormationNames] = useState<Record<string, string>>({});
   const [period, setPeriod] = useState<"day" | "week">("day");
   const [day, setDay] = useState(localDateString(new Date()));
   const [formationFilter, setFormationFilter] = useState("all");
@@ -88,14 +91,18 @@ export default function DirectionSuiviPage() {
       const { error: refreshError } = await supabase.rpc("refresh_session_attendance_for_date", { p_date: date });
       if (refreshError) { setError("Le détail par séance n’a pas pu être actualisé : " + refreshError.message); }
     }
-    const [{ data, error: attendanceError }, { data: perSession, error: sessionError }] = await Promise.all([
+    const [{ data, error: attendanceError }, { data: perSession, error: sessionError }, { data: formationRows, error: formationsError }, { data: studentRows, error: studentsError }] = await Promise.all([
       supabase.from("daily_attendance")
         .select("id,person_id,person_type,local_date,nominal_time,cutoff_time,arrived_at,status,minutes_after_cutoff")
         .gte("local_date", start).lte("local_date", end).order("local_date", { ascending: false }).order("arrived_at", { ascending: false }).limit(2000),
       supabase.from("director_session_attendance")
         .select("id,person_id,display_name,first_name,last_name,student_number,session_id,session_date,formation_name,planned_start,planned_end,status,arrived_at,nominal_time,cutoff_time,minutes_after_cutoff,daily_attendance_id")
-        .gte("session_date", start).lte("session_date", end).order("session_date", { ascending: false }).order("planned_start", { ascending: true }).limit(4000)
+        .gte("session_date", start).lte("session_date", end).order("session_date", { ascending: false }).order("planned_start", { ascending: true }).limit(4000),
+      supabase.from("formations").select("id,name,code").eq("status","active").order("name"),
+      supabase.from("students").select("id,formation_id").limit(5000)
     ]);
+    setFormations((formationRows ?? []) as Formation[]);
+    if (formationsError || studentsError) setError("Le catalogue des formations ou les inscriptions ne sont pas entièrement accessibles ; les filtres peuvent être incomplets.");
     if (sessionError) setError("Le rapport général est chargé, mais le détail par séance est inaccessible : " + sessionError.message);
     setSessionRows((perSession ?? []) as SessionAttendance[]);
     if (attendanceError) {
@@ -136,6 +143,12 @@ export default function DirectionSuiviPage() {
       }
     }
     setProfiles(map);
+    const formationNameById = new Map(((formationRows ?? []) as Formation[]).map((formation) => [formation.id, formation.name]));
+    const studentNames: Record<string, string> = {};
+    for (const student of (studentRows ?? []) as { id: string; formation_id: string | null }[]) {
+      if (student.formation_id && formationNameById.has(student.formation_id)) studentNames[student.id] = formationNameById.get(student.formation_id)!;
+    }
+    setStudentFormationNames(studentNames);
     setRows(attendance);
     setBusy(false);
   }, [day, period]);
@@ -153,13 +166,20 @@ export default function DirectionSuiviPage() {
     staff: rows.filter((row) => ["staff", "personnel"].includes(row.person_type.toLowerCase())).length,
     students: rows.filter((row) => ["student", "apprenant"].includes(row.person_type.toLowerCase())).length
   }), [rows]);
-  const formationOptions = useMemo(() => [...new Map(sessionRows.filter((row) => row.formation_name).map((row) => [String(row.formation_name), String(row.formation_name)])).values()].sort((a, b) => a.localeCompare(b, "fr")), [sessionRows]);
+  const formationOptions = useMemo(() => [...new Set([...formations.map((formation) => formation.name), ...sessionRows.map((row) => row.formation_name).filter((name): name is string => Boolean(name))])].sort((a, b) => a.localeCompare(b, "fr")), [formations, sessionRows]);
   const filteredAttendanceRows = useMemo(() => rows.filter((row) => {
     const staff = ["staff", "personnel", "teacher", "enseignant"].includes(row.person_type.toLowerCase());
     if (personTypeFilter === "staff" && !staff) return false;
     if (personTypeFilter === "student" && staff) return false;
+    if (formationFilter !== "all" && studentFormationNames[row.person_id] !== formationFilter) return false;
+    const status = row.status.toLowerCase();
+    if (statusFilter === "present" && !["present", "on_time"].includes(status)) return false;
+    if (statusFilter === "late" && status !== "late") return false;
+    if (statusFilter === "absent" && status !== "absent") return false;
+    if (statusFilter === "regularized" && !["regularized", "regularized_late", "regularised", "regularised_late", "paid"].includes(status)) return false;
+    if (statusFilter === "upcoming" && !["scheduled", "upcoming", "pending"].includes(status)) return false;
     return true;
-  }), [rows, personTypeFilter]);
+  }), [rows, personTypeFilter, formationFilter, statusFilter, studentFormationNames]);
   const filteredSessionRows = useMemo(() => sessionRows.filter((row) => {
     if (personTypeFilter === "staff") return false;
     if (formationFilter !== "all" && row.formation_name !== formationFilter) return false;
