@@ -75,7 +75,15 @@ export default function AgendaHomeReminder() {
       }
     }
     void loadReminders();
-    return () => { cancelled = true; };
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      void loadReminders();
+    });
+    window.addEventListener("focus", loadReminders);
+    return () => {
+      cancelled = true;
+      authListener.subscription.unsubscribe();
+      window.removeEventListener("focus", loadReminders);
+    };
   }, [pathname]);
 
   if (pathname !== "/" || !loaded || events.length === 0) return null;
