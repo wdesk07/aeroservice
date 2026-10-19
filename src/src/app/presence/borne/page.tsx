@@ -192,6 +192,28 @@ export default function PresenceKioskPage() {
     setMessage("Observation enregistrée localement. Elle n’est pas encore une présence officielle et ne déclenche aucune pénalité.");
   }
 
+  function exportOfflineObservations() {
+    if (offlineEvents.length === 0) {
+      setMessage("Aucune observation hors connexion à exporter.");
+      return;
+    }
+    const headers = ["Identifiant", "Nom", "Heure observée", "Motif", "Borne", "Enregistré localement par", "ID technique"];
+    const rows = offlineEvents.map((item) => [
+      item.person_identifier, item.person_name, item.observed_at, item.reason,
+      item.device_label, item.created_by_label, item.client_event_id,
+    ]);
+    const csvCell = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+    const csv = "\uFEFF" + [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "aero-service-observations-hors-connexion.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage("Export créé. Conservez ce fichier en lieu sûr ; il contient des données personnelles.");
+  }
+
   async function syncOfflineObservations() {
     if (!navigator.onLine || !user || !canManageOperatingDay || offlineEvents.length === 0 || syncingOffline) return;
     setSyncingOffline(true);
@@ -524,6 +546,7 @@ export default function PresenceKioskPage() {
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #d5deea" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <strong>Observations en attente sur cet appareil : {offlineEvents.length}</strong>
+                {offlineEvents.length > 0 && <button type="button" onClick={exportOfflineObservations} style={secondaryButton}>Exporter une copie CSV</button>}
                 {online && offlineEvents.length > 0 && <button type="button" disabled={syncingOffline} onClick={() => void syncOfflineObservations()} style={secondaryButton}>{syncingOffline ? "Synchronisation…" : "Synchroniser maintenant"}</button>}
               </div>
               {offlineEvents.length > 0 ? (
