@@ -300,12 +300,19 @@ export default function Home() {
   }, []);
 
   const loadCounts = useCallback(async () => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const cached = user ? readOfflineSnapshot<Record<string, number | null>>(user.id, "dashboard_counts") : null;
+      setCounts(cached ?? {});
+      return;
+    }
     const entries = await Promise.all(metrics.map(async item => {
       const result = await supabase.from(item.table).select("*", { count: "exact", head: true });
       return [item.table, result.error ? null : (result.count ?? 0)] as const;
     }));
-    setCounts(Object.fromEntries(entries));
-  }, []);
+    const nextCounts = Object.fromEntries(entries) as Record<string, number | null>;
+    setCounts(nextCounts);
+    if (user) saveOfflineSnapshot(user.id, "dashboard_counts", nextCounts);
+  }, [user]);
 
   const loadRows = useCallback(async (key: ModuleKey) => {
     if (!canAccessModule(key, roles.map(role => role.code))) {
