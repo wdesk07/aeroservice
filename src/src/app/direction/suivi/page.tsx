@@ -52,6 +52,7 @@ export default function DirectionSuiviPage() {
   const [day, setDay] = useState(localDateString(new Date()));
   const [formationFilter, setFormationFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "present" | "late" | "absent" | "regularized" | "upcoming">("all");
+  const [personTypeFilter, setPersonTypeFilter] = useState<"all" | "student" | "staff">("all");
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
 
@@ -139,6 +140,10 @@ export default function DirectionSuiviPage() {
     setBusy(false);
   }, [day, period]);
 
+  useEffect(() => {
+    const type = new URLSearchParams(window.location.search).get("type");
+    if (type === "staff" || type === "student") setPersonTypeFilter(type);
+  }, []);
   useEffect(() => { void load(); }, [load]);
 
   const totals = useMemo(() => ({
@@ -149,7 +154,14 @@ export default function DirectionSuiviPage() {
     students: rows.filter((row) => ["student", "apprenant"].includes(row.person_type.toLowerCase())).length
   }), [rows]);
   const formationOptions = useMemo(() => [...new Map(sessionRows.filter((row) => row.formation_name).map((row) => [String(row.formation_name), String(row.formation_name)])).values()].sort((a, b) => a.localeCompare(b, "fr")), [sessionRows]);
+  const filteredAttendanceRows = useMemo(() => rows.filter((row) => {
+    const staff = ["staff", "personnel", "teacher", "enseignant"].includes(row.person_type.toLowerCase());
+    if (personTypeFilter === "staff" && !staff) return false;
+    if (personTypeFilter === "student" && staff) return false;
+    return true;
+  }), [rows, personTypeFilter]);
   const filteredSessionRows = useMemo(() => sessionRows.filter((row) => {
+    if (personTypeFilter === "staff") return false;
     if (formationFilter !== "all" && row.formation_name !== formationFilter) return false;
     const status = row.status.toLowerCase();
     if (statusFilter === "present" && !["present", "on_time"].includes(status)) return false;
@@ -182,6 +194,7 @@ export default function DirectionSuiviPage() {
     <section style={styles.toolbar}>
       <label style={styles.label}>Période<select value={period} onChange={(e) => setPeriod(e.target.value as "day" | "week")} style={styles.input}><option value="day">Bilan quotidien</option><option value="week">Bilan hebdomadaire (lundi–dimanche)</option></select></label>
       <label style={styles.label}>Date de référence<input type="date" value={day} onChange={(e) => setDay(e.target.value)} style={styles.input} /></label>
+      <label style={styles.label}>Personnes<select value={personTypeFilter} onChange={(e) => setPersonTypeFilter(e.target.value as typeof personTypeFilter)} style={styles.input}><option value="all">Apprenants et personnel</option><option value="student">Apprenants</option><option value="staff">Personnel</option></select></label>
       <label style={styles.label}>Formation<select value={formationFilter} onChange={(e) => setFormationFilter(e.target.value)} style={styles.input}><option value="all">Toutes les formations</option>{formationOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
       <label style={styles.label}>Statut<select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} style={styles.input}><option value="all">Tous les statuts</option><option value="present">Présents</option><option value="late">En retard</option><option value="absent">Absents</option><option value="regularized">Régularisés</option><option value="upcoming">Séances à venir</option></select></label>
       <div style={styles.note}>Le filtre s’applique au détail des séances. Le pointage tardif reste dans l’historique même après paiement.</div>
@@ -197,11 +210,11 @@ export default function DirectionSuiviPage() {
     <section style={styles.card}>
       <h2 style={styles.h2}>Présence et absence par séance de formation</h2>
       <p style={styles.muted}>Un seul pointage journalier reste autorisé. Chaque séance prévue est suivie séparément : une arrivée après la fin d’un cours laisse ce cours marqué absent, même si l’apprenant pointe pour une séance plus tardive.</p>
-      {filteredSessionRows.length === 0 ? <p style={styles.muted}>Aucune séance ne correspond à cette formation, cette date et ce statut.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Apprenant</th><th>Formation</th><th>Séance</th><th>Heure prévue</th><th>Pointage journalier</th><th>Statut de la séance</th></tr></thead><tbody>{filteredSessionRows.map((row) => { const status = row.status.toLowerCase(); const label = ["present","on_time"].includes(status) ? "Présent" : status === "late" ? "En retard" : status === "absent" ? "Absent" : ["regularized","regularized_late","regularised","regularised_late"].includes(status) ? "Régularisé" : "À venir"; const badge = ["present","on_time"].includes(status) ? styles.ontime : status === "late" ? styles.late : status === "absent" ? styles.absent : ["regularized","regularized_late","regularised","regularised_late"].includes(status) ? styles.regularized : styles.pending; return <tr key={row.id}><td>{row.session_date}</td><td><strong>{fullName({ id: row.person_id, display_name: row.display_name, first_name: row.first_name, last_name: row.last_name, email: null })}</strong></td><td>{row.formation_name || "—"}</td><td>{row.planned_start?.slice(0,5)}–{row.planned_end?.slice(0,5)}</td><td>{row.nominal_time?.slice(0,5)}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...badge }}>{label}</span></td></tr>; })}</tbody></table></div>}
+      {personTypeFilter === "staff" ? <p style={styles.muted}>Le personnel est suivi dans le tableau de pointages ci-dessous ; le détail par séance concerne les formations des apprenants.</p> : filteredSessionRows.length === 0 ? <p style={styles.muted}>Aucune séance ne correspond à cette formation, cette date et ce statut.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Apprenant</th><th>Formation</th><th>Séance</th><th>Heure prévue</th><th>Pointage journalier</th><th>Statut de la séance</th></tr></thead><tbody>{filteredSessionRows.map((row) => { const status = row.status.toLowerCase(); const label = ["present","on_time"].includes(status) ? "Présent" : status === "late" ? "En retard" : status === "absent" ? "Absent" : ["regularized","regularized_late","regularised","regularised_late"].includes(status) ? "Régularisé" : "À venir"; const badge = ["present","on_time"].includes(status) ? styles.ontime : status === "late" ? styles.late : status === "absent" ? styles.absent : ["regularized","regularized_late","regularised","regularised_late"].includes(status) ? styles.regularized : styles.pending; return <tr key={row.id}><td>{row.session_date}</td><td><strong>{fullName({ id: row.person_id, display_name: row.display_name, first_name: row.first_name, last_name: row.last_name, email: null })}</strong></td><td>{row.formation_name || "—"}</td><td>{row.planned_start?.slice(0,5)}–{row.planned_end?.slice(0,5)}</td><td>{row.nominal_time?.slice(0,5)}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...badge }}>{label}</span></td></tr>; })}</tbody></table></div>}
     </section>
     <section style={styles.card}>
       <h2 style={styles.h2}>Détail des pointages</h2>
-      {rows.length === 0 ? <p style={styles.muted}>Aucun pointage enregistré pour cette période.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Nom et prénom</th><th>Catégorie</th><th>Heure prévue</th><th>Heure de pointage</th><th>Statut</th><th>Retard</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.local_date}</td><td><strong>{fullName(profiles[row.person_id])}</strong></td><td>{["staff", "personnel"].includes(row.person_type.toLowerCase()) ? "Personnel" : "Apprenant"}</td><td>{row.nominal_time?.slice(0, 5) || "—"}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...(["regularized", "regularized_late", "regularised", "regularised_late"].includes(row.status.toLowerCase()) ? styles.regularized : row.status.toLowerCase() === "late" ? styles.late : row.status.toLowerCase() === "absent" ? styles.absent : styles.ontime) }}>{statusLabel(row.status)}</span></td><td>{minutesLabel(row.minutes_after_cutoff)}</td></tr>)}</tbody></table></div>}
+      {filteredAttendanceRows.length === 0 ? <p style={styles.muted}>Aucun pointage ne correspond à cette catégorie sur la période.</p> : <div style={{ overflowX: "auto" }}><table style={styles.table}><thead><tr><th>Date</th><th>Nom et prénom</th><th>Catégorie</th><th>Heure prévue</th><th>Heure de pointage</th><th>Statut</th><th>Retard</th></tr></thead><tbody>{filteredAttendanceRows.map((row) => <tr key={row.id}><td>{row.local_date}</td><td><strong>{fullName(profiles[row.person_id])}</strong></td><td>{["staff", "personnel"].includes(row.person_type.toLowerCase()) ? "Personnel" : "Apprenant"}</td><td>{row.nominal_time?.slice(0, 5) || "—"}</td><td>{row.arrived_at ? new Date(row.arrived_at).toLocaleTimeString("fr-FR", { timeZone: "Africa/Porto-Novo", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span style={{ ...styles.status, ...(["regularized", "regularized_late", "regularised", "regularised_late"].includes(row.status.toLowerCase()) ? styles.regularized : row.status.toLowerCase() === "late" ? styles.late : row.status.toLowerCase() === "absent" ? styles.absent : styles.ontime) }}>{statusLabel(row.status)}</span></td><td>{minutesLabel(row.minutes_after_cutoff)}</td></tr>)}</tbody></table></div>}
     </section>
     <p style={styles.footer}>Aéro Service · Rapport calculé à partir des pointages présents dans la base de données.</p>
   </main>;
