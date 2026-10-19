@@ -344,16 +344,49 @@ export default function Home() {
 
   async function sendWelcomeEmail(registration: Record<string, unknown>) {
     const personId = String(registration.person_id ?? "");
-    if (!personId) { setError("Impossible d’envoyer le lien : identifiant du compte apprenant manquant."); return; }
-    setSendingWelcomeFor(personId); setError(""); setNotice("");
-    const { data, error: sendError } = await supabase.functions.invoke("send-welcome-email", { body: { person_id: personId, redirect_to: window.location.origin } });
-    if (sendError || data?.error || !data?.ok) {
-      const detail = data?.detail || data?.error || sendError?.message || "Envoi non confirmé.";
-      setError("Le compte reste actif, mais le lien de connexion n’a pas été envoyé. " + detail);
-    } else {
-      setNotice("Lien de connexion envoyé à l’adresse e-mail de l’apprenant. Son statut actif n’a pas été modifié.");
+    if (!personId) {
+      setError("Impossible d’envoyer le lien : identifiant du compte apprenant manquant.");
+      return;
     }
-    setSendingWelcomeFor(null);
+
+    setSendingWelcomeFor(personId);
+    setError("");
+    setNotice("");
+
+    try {
+      // Read the existing learner account; do not create or modify an account.
+      const { data: learner, error: learnerError } = await supabase
+        .from("profiles")
+        .select("email,status")
+        .eq("id", personId)
+        .maybeSingle();
+
+      if (learnerError) throw new Error("Impossible de vérifier le compte apprenant : " + learnerError.message);
+      if (!learner) throw new Error("Le profil de cet apprenant est introuvable.");
+      if (String(learner.status ?? "").toLowerCase() !== "active") {
+        throw new Error("Le compte doit être actif avant l’envoi du lien de connexion.");
+      }
+      if (typeof learner.email !== "string" || !learner.email.trim()) {
+        throw new Error("Aucune adresse e-mail n’est enregistrée pour cet apprenant.");
+      }
+
+      // Use Supabase Auth's tested Magic Link flow and always return to the production app.
+      const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+        email: learner.email.trim(),
+        options: {
+          emailRedirectTo: "https://aero-service.vercel.app/",
+          shouldCreateUser: false,
+        },
+      });
+      if (magicLinkError) throw new Error(magicLinkError.message);
+
+      setNotice("Lien de connexion envoyé à l’adresse e-mail de l’apprenant. Le lien ouvre Aéro Service. Le compte existant n’a pas été modifié.");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Envoi non confirmé.";
+      setError("Le lien de connexion n’a pas été envoyé. " + detail);
+    } finally {
+      setSendingWelcomeFor(null);
+    }
   }
 
   async function handleSignOut() { await supabase.auth.signOut(); setActive("dashboard"); setNotice(""); }
