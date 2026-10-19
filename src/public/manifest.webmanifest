@@ -1,0 +1,11 @@
+{
+  "name": "Aéro Service — Borne de présence",
+  "short_name": "Aéro Présence",
+  "description": "Borne officielle de présence Aéro Service avec procédure de secours hors connexion.",
+  "lang": "fr",
+  "start_url": "/presence/borne",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#174ea6"
+}
