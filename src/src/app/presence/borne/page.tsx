@@ -8,6 +8,17 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 );
 
+type OfflineBackupEvent = {
+  client_event_id: string;
+  person_identifier: string;
+  person_name: string;
+  observed_at: string;
+  reason: string;
+  device_label: string;
+  created_at_local: string;
+  created_by_label: string;
+};
+
 type AttendanceResult = {
   ok?: boolean;
   duplicate?: boolean;
@@ -52,7 +63,11 @@ export default function PresenceKioskPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [result, setResult] = useState<AttendanceResult | null>(null);
+
+  const [online, setOnline] = useState(true);
+  const [offlineEvents, setOfflineEvents] = useState<OfflineBackupEvent[]>([]);
+  const [offlineForm, setOfflineForm] = useState({ person_identifier: "", person_name: "", observed_at: "", reason: "" });
+  const [syncingOffline, setSyncingOffline] = useState(false);  const [result, setResult] = useState<AttendanceResult | null>(null);
 
   useEffect(() => {
     fetch("/api/presence/kiosk-status", { cache: "no-store" })
@@ -80,9 +95,23 @@ export default function PresenceKioskPage() {
         supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN"] }),
       ]);
       if (alive) {
-        setIsAdmin(adminAccess === true);
-        setCanManageOperatingDay(operatingDayAccess === true);
-        setCanConfigureLocation(locationAccess === true);
+        const verifiedStaff = adminAccess === true && operatingDayAccess === true;
+        if (verifiedStaff) {
+          try { localStorage.setItem("aero_offline_staff_verified", JSON.stringify({ userId: nextUser.id, verifiedAt: Date.now() })); } catch {}
+          setIsAdmin(true);
+          setCanManageOperatingDay(true);
+          setCanConfigureLocation(locationAccess === true);
+        } else {
+          let recentlyVerified = false;
+          try {
+            const marker = JSON.parse(localStorage.getItem("aero_offline_staff_verified") || "null");
+            recentlyVerified = marker?.userId === nextUser.id && Date.now() - Number(marker?.verifiedAt) < 24 * 60 * 60 * 1000;
+          } catch {}
+          // Offline permission only unlocks a local draft queue; uploads are re-authorized by the server.
+          setIsAdmin(recentlyVerified);
+          setCanManageOperatingDay(recentlyVerified);
+          setCanConfigureLocation(false);
+        }
         setLoading(false);
       }
     }
@@ -96,6 +125,99 @@ export default function PresenceKioskPage() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+
+  useEffect(() => {
+    const refreshOnline = () => setOnline(navigator.onLine);
+    refreshOnline();
+    window.addEventListener("online", refreshOnline);
+    window.addEventListener("offline", refreshOnline);
+    try {
+      const stored = JSON.parse(localStorage.getItem("aero_offline_attendance_queue") || "[]");
+      if (Array.isArray(stored)) setOfflineEvents(stored);
+    } catch { setOfflineEvents([]); }
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    const manifest = document.createElement("link");
+    manifest.rel = "manifest";
+    manifest.href = "/manifest.webmanifest";
+    document.head.appendChild(manifest);
+    return () => {
+      window.removeEventListener("online", refreshOnline);
+      window.removeEventListener("offline", refreshOnline);
+      manifest.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("aero_offline_attendance_queue", JSON.stringify(offlineEvents)); } catch {}
+  }, [offlineEvents]);
+
+  function localDateTimeValue(date = new Date()) {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  }
+
+  function saveOfflineObservation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!user || !canManageOperatingDay) {
+      setMessage("La procédure de secours est réservée au personnel autorisé déjà connecté sur cette borne.");
+      return;
+    }
+    const identifierValue = offlineForm.person_identifier.trim();
+    const nameValue = offlineForm.person_name.trim();
+    const reasonValue = offlineForm.reason.trim();
+    const observedDate = new Date(offlineForm.observed_at);
+    if (!identifierValue || !nameValue || reasonValue.length < 3 || Number.isNaN(observedDate.getTime())) {
+      setMessage("Complétez l’identifiant, le nom, l’heure constatée et un motif détaillé.");
+      return;
+    }
+    const eventId = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+    const entry: OfflineBackupEvent = {
+      client_event_id: eventId,
+      person_identifier: identifierValue,
+      person_name: nameValue,
+      observed_at: observedDate.toISOString(),
+      reason: reasonValue,
+      device_label: "Borne officielle Aéro Service",
+      created_at_local: new Date().toISOString(),
+      created_by_label: user.email || user.id,
+    };
+    setOfflineEvents((current) => [entry, ...current]);
+    setOfflineForm({ person_identifier: "", person_name: "", observed_at: localDateTimeValue(), reason: "" });
+    setMessage("Observation enregistrée localement. Elle n’est pas encore une présence officielle et ne déclenche aucune pénalité.");
+  }
+
+  async function syncOfflineObservations() {
+    if (!navigator.onLine || !user || !canManageOperatingDay || offlineEvents.length === 0 || syncingOffline) return;
+    setSyncingOffline(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/presence/offline-backup", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ events: offlineEvents }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "SYNC_FAILED");
+      const acceptedIds = new Set(offlineEvents.map((item) => item.client_event_id));
+      setOfflineEvents((current) => current.filter((item) => !acceptedIds.has(item.client_event_id)));
+      setMessage(String(payload.accepted) + " observation(s) transmises au serveur, en attente de vérification par la Direction. Aucune pénalité ni présence officielle n’a été créée automatiquement.");
+    } catch (error) {
+      setMessage(errorMessage(error instanceof Error ? error.message : "Synchronisation impossible. Les observations restent sur la borne."));
+    } finally {
+      setSyncingOffline(false);
+    }
+  }
+
+  useEffect(() => {
+    if (online && user && canManageOperatingDay && offlineEvents.length > 0 && !syncingOffline) {
+      void syncOfflineObservations();
+    }
+  }, [online, user, canManageOperatingDay, offlineEvents.length]);
 
   async function activateKiosk() {
     setBusy(true);
@@ -180,6 +302,7 @@ export default function PresenceKioskPage() {
         await supabase.auth.signOut();
         throw new Error("KIOSK_ADMIN_REQUIRED");
       }
+      try { localStorage.setItem("aero_offline_staff_verified", JSON.stringify({ userId: data.user.id, verifiedAt: Date.now() })); } catch {}
       setPassword("");
       setMessage("Connexion réussie. Vous pouvez enregistrer la borne et gérer séparément l’ouverture ou la fermeture de la journée.");
     } catch (error) {
@@ -366,6 +489,48 @@ export default function PresenceKioskPage() {
             )}
             <button type="button" onClick={() => void signOut()} disabled={busy} style={secondaryButton}>Se déconnecter et laisser la borne disponible</button>
           </div>
+        )}
+
+
+        {!loading && user && canManageOperatingDay && (
+          <section style={{ border: "1px solid #d5deea", borderRadius: 12, padding: 16, marginBottom: 16, background: online ? "#f8fbff" : "#fff8e8" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Secours de présence hors connexion</h2>
+              <span style={{ borderRadius: 999, padding: "5px 10px", fontWeight: 700, fontSize: 12, background: online ? "#e5f6eb" : "#fff0c2", color: online ? "#17663b" : "#80500a" }}>
+                {online ? "Internet disponible" : "Hors connexion"}
+              </span>
+            </div>
+            <p style={{ color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>
+              Réservé au personnel déjà authentifié. Notez une présence observée pendant une panne, avec l’heure constatée et le motif. Cette note reste une <strong>observation à vérifier</strong> : elle ne certifie pas l’heure du serveur, ne remplace pas un pointage normal et ne crée ni absence justifiée ni pénalité.
+            </p>
+            <form onSubmit={saveOfflineObservation} style={{ display: "grid", gap: 10 }}>
+              <label style={labelStyle}>Matricule ou identifiant de l’apprenant
+                <input required maxLength={120} value={offlineForm.person_identifier} onChange={(e) => setOfflineForm({ ...offlineForm, person_identifier: e.target.value })} style={inputStyle} placeholder="Matricule ou identifiant" />
+              </label>
+              <label style={labelStyle}>Nom complet constaté
+                <input required maxLength={160} value={offlineForm.person_name} onChange={(e) => setOfflineForm({ ...offlineForm, person_name: e.target.value })} style={inputStyle} placeholder="Nom et prénom" />
+              </label>
+              <label style={labelStyle}>Heure constatée sur place
+                <input required type="datetime-local" value={offlineForm.observed_at} onChange={(e) => setOfflineForm({ ...offlineForm, observed_at: e.target.value })} style={inputStyle} />
+              </label>
+              <label style={labelStyle}>Motif / circonstances de la panne
+                <textarea required minLength={3} maxLength={500} value={offlineForm.reason} onChange={(e) => setOfflineForm({ ...offlineForm, reason: e.target.value })} style={{ ...inputStyle, minHeight: 76, resize: "vertical" }} placeholder="Ex. panne Internet constatée à l’entrée; identité contrôlée par le secrétariat." />
+              </label>
+              <button type="submit" style={online ? secondaryButton : primaryButton}>Enregistrer l’observation sur cette borne</button>
+            </form>
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #d5deea" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <strong>Observations en attente sur cet appareil : {offlineEvents.length}</strong>
+                {online && offlineEvents.length > 0 && <button type="button" disabled={syncingOffline} onClick={() => void syncOfflineObservations()} style={secondaryButton}>{syncingOffline ? "Synchronisation…" : "Synchroniser maintenant"}</button>}
+              </div>
+              {offlineEvents.length > 0 ? (
+                <ul style={{ paddingLeft: 20, lineHeight: 1.6, fontSize: 13 }}>
+                  {offlineEvents.slice(0, 10).map((item) => <li key={item.client_event_id}><strong>{item.person_name}</strong> ({item.person_identifier}) — {new Date(item.observed_at).toLocaleString("fr-FR", { timeZone: "Africa/Porto-Novo" })}<br /><span style={{ color: "#52647a" }}>{item.reason}</span></li>)}
+                </ul>
+              ) : <p style={{ marginBottom: 0, fontSize: 13, color: "#52647a" }}>Aucune observation en attente.</p>}
+              <p style={{ fontSize: 12, color: "#80500a", lineHeight: 1.5, marginBottom: 0 }}>Conservez la borne ouverte pendant la panne si possible. Si le navigateur est effacé ou si l’appareil tombe en panne, les notes non synchronisées peuvent être perdues : tenez aussi un registre papier signé.</p>
+            </div>
+          </section>
         )}
 
         {!loading && !user && (
