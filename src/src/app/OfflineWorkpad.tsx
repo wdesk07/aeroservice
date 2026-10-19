@@ -24,6 +24,28 @@ const categories = [
   "Autre opération",
 ];
 
+
+function parseSemicolonCsv(input: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [], cell = "", quoted = false;
+  const source = input.replace(/^\\uFEFF/, "");
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; }
+    else if (ch === '"') quoted = !quoted;
+    else if (ch === ";" && !quoted) { row.push(cell); cell = ""; }
+    else if ((ch === "\\n" || ch === "\\r") && !quoted) {
+      if (ch === "\\r" && source[i + 1] === "\\n") i++;
+      row.push(cell); cell = "";
+      if (row.some((v) => v.length)) rows.push(row);
+      row = [];
+    } else cell += ch;
+  }
+  row.push(cell);
+  if (row.some((v) => v.length)) rows.push(row);
+  return rows;
+}
+
 export default function OfflineWorkpad() {
   const [online, setOnline] = useState(true);
   const [items, setItems] = useState<OfflineWorkItem[]>([]);
@@ -106,6 +128,50 @@ export default function OfflineWorkpad() {
     setMessage("Export réalisé. Le fichier peut contenir des données personnelles : gardez-le en lieu sûr.");
   }
 
+  async function importItems(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setMessage("Fichier trop volumineux (maximum 2 Mo)."); return; }
+    try {
+      const rows = parseSemicolonCsv(await file.text());
+      if (rows.length < 2) throw new Error("empty");
+      const headers = rows[0].map((v) => v.trim());
+      const required = ["Type d’opération", "Référence", "Détails à reprendre", "Montant indicatif", "Statut de reprise", "Créé le", "ID local"];
+      const col = (name: string) => headers.indexOf(name);
+      if (required.some((name) => col(name) < 0)) throw new Error("format");
+      const imported: OfflineWorkItem[] = [];
+      for (const row of rows.slice(1)) {
+        const detailsValue = row[col("Détails à reprendre")] || "";
+        const categoryValue = row[col("Type d’opération")] || "";
+        if (detailsValue.trim().length < 3) continue;
+        const rawStatus = row[col("Statut de reprise")];
+        const rawDate = Date.parse(row[col("Créé le")] || "");
+        imported.push({
+          id: (row[col("ID local")] || "").trim() || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now()) + "-" + imported.length),
+          category: categories.includes(categoryValue) ? categoryValue : "Autre opération",
+          reference: (row[col("Référence")] || "").slice(0, 120),
+          details: detailsValue.slice(0, 1500),
+          amount: (row[col("Montant indicatif")] || "").slice(0, 40),
+          createdAt: Number.isFinite(rawDate) ? new Date(rawDate).toISOString() : new Date().toISOString(),
+          status: rawStatus === "En cours" || rawStatus === "Terminé" ? rawStatus : "À reprendre",
+        });
+        if (imported.length >= 1000) break;
+      }
+      if (!imported.length) { setMessage("Aucune note valide trouvée dans ce fichier."); return; }
+      const existing = new Set(items.map((item) => item.id));
+      const unique = imported.filter((item) => !existing.has(item.id));
+      if (!window.confirm("Importer " + unique.length + " note(s) nouvelles ? Les identifiants déjà présents seront ignorés. Aucune opération officielle ne sera validée.")) return;
+      setItems((current) => {
+        const ids = new Set(current.map((item) => item.id));
+        return [...unique.filter((item) => !ids.has(item.id)), ...current];
+      });
+      setMessage(unique.length ? unique.length + " note(s) importée(s) localement. Aucune opération officielle n’a été transmise." : "Toutes les notes de ce fichier sont déjà présentes.");
+    } catch {
+      setMessage("Import impossible : utilisez un export CSV du Carnet de reprise Aéro Service.");
+    }
+  }
+
   return (
     <aside style={{ position: "fixed", zIndex: 1000, right: 14, bottom: 14, width: "min(390px, calc(100vw - 28px))", fontFamily: "inherit", color: "#17324d" }}>
       <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
@@ -138,6 +204,10 @@ export default function OfflineWorkpad() {
         {message && <p role="status" style={{ fontSize: 12, lineHeight: 1.4 }}>{message}</p>}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "10px 0" }}>
           <button type="button" onClick={exportItems} disabled={!items.length} style={{ padding: "7px 9px", border: "1px solid #9fb6cc", borderRadius: 7, background: "white", cursor: "pointer" }}>Exporter CSV</button>
+          <label style={{ display: "inline-flex", alignItems: "center", padding: "7px 9px", border: "1px solid #9fb6cc", borderRadius: 7, background: "white", cursor: "pointer", fontSize: 13 }}>
+            Importer un CSV
+            <input type="file" accept=".csv,text/csv" onChange={importItems} style={{ display: "none" }} />
+          </label>
           <button type="button" onClick={() => { if (items.length && window.confirm("Supprimer toutes les notes locales de ce navigateur ? Vérifiez d’abord vos exports.")) { setItems([]); setMessage("Carnet local vidé."); } }} disabled={!items.length} style={{ padding: "7px 9px", border: "1px solid #d6a3a3", borderRadius: 7, background: "white", color: "#8f2020", cursor: "pointer" }}>Effacer le carnet</button>
         </div>
         <p style={{ fontSize: 11, lineHeight: 1.4, color: "#6c4a16" }}>Confidentialité : les notes sont stockées localement sans chiffrement dans le navigateur. Sur un ordinateur partagé, évitez les informations sensibles, exportez ce qui est nécessaire et effacez le carnet après régularisation. En cas de panne, gardez aussi un registre papier.</p>
