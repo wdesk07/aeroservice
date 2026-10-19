@@ -221,6 +221,27 @@ export default function Home() {
     }
   }, [user?.id, offlineDraftLoadedFor, active, createValues, form, lateForm, justificationForm, ruleForm, applyRuleForm, showCreate]);
 
+  const exportOfflineOperationalDraft = () => {
+    if (!user?.id) return;
+    try {
+      const raw = localStorage.getItem(`aero_operational_draft_v1:${user.id}`);
+      if (!raw) {
+        setNotice("Aucun brouillon local à exporter.");
+        return;
+      }
+      const blob = new Blob([raw], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "aero-service-brouillon-local.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("Copie locale exportée. Le fichier peut contenir des informations personnelles : conservez-le en lieu sûr.");
+    } catch {
+      setError("Impossible d’exporter le brouillon local depuis ce navigateur.");
+    }
+  };
+
   const clearOfflineOperationalDraft = () => {
     if (!user?.id) return;
     try { localStorage.removeItem(`aero_operational_draft_v1:${user.id}`); } catch {}
@@ -1136,7 +1157,10 @@ export default function Home() {
           <strong>Brouillon de travail sur cet appareil</strong>
           <p style={{margin:"6px 0",fontSize:13}}>Les champs opérationnels sont sauvegardés localement pour éviter de les perdre si la connexion coupe. Ils ne sont jamais envoyés automatiquement et ne constituent ni une inscription validée, ni un paiement reçu, ni une décision officielle. Les mots de passe et les champs de création de compte sont exclus. Le stockage du navigateur n’est pas chiffré : sur un ordinateur partagé, effacez le brouillon après usage.</p>
           <p style={{margin:"6px 0",fontSize:12,color:"#475569"}}>{offlineDraftSavedAt ? `Dernière sauvegarde locale : ${new Date(offlineDraftSavedAt).toLocaleString("fr-FR")}` : "Aucun brouillon opérationnel sauvegardé pour le moment."}{offlineDraftRestored ? " · Brouillon précédent restauré." : ""}</p>
-          <button type="button" className="btn secondary" onClick={clearOfflineOperationalDraft} disabled={!offlineDraftSavedAt && !offlineDraftRestored} style={{marginTop:6}}>Effacer le brouillon local</button>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
+            <button type="button" className="btn secondary" onClick={exportOfflineOperationalDraft} disabled={!offlineDraftSavedAt} >Exporter une copie JSON</button>
+            <button type="button" className="btn secondary" onClick={clearOfflineOperationalDraft} disabled={!offlineDraftSavedAt && !offlineDraftRestored}>Effacer le brouillon local</button>
+          </div>
         </section>
         {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
         {active==="dashboard" && <>
