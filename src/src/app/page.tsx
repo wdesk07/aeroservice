@@ -125,6 +125,10 @@ export default function Home() {
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [ruleForm, setRuleForm] = useState({ formation_id: "", penalty_type: "late_arrival", description: "", target_scope: "students", application_mode: "automatic", applies_after_time: "", min_delay_minutes: "1", max_delay_minutes: "20", tolerance_minutes: "0", amount_fcfa: "1000" });
   const [applyRuleForm, setApplyRuleForm] = useState({ rule_id: "", person_id: "" });
+  // Offline drafts are scoped to the signed-in user and deliberately exclude credentials/account-creation fields.
+  const [offlineDraftLoadedFor, setOfflineDraftLoadedFor] = useState<string | null>(null);
+  const [offlineDraftSavedAt, setOfflineDraftSavedAt] = useState<string | null>(null);
+  const [offlineDraftRestored, setOfflineDraftRestored] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -147,6 +151,77 @@ export default function Home() {
       setSearch(params.get("search") || "");
     }
   }, []);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) {
+      setOfflineDraftLoadedFor(null);
+      setOfflineDraftSavedAt(null);
+      setOfflineDraftRestored(false);
+      return;
+    }
+    let cancelled = false;
+    try {
+      const raw = localStorage.getItem(`aero_operational_draft_v1:${userId}`);
+      if (raw) {
+        const draft = JSON.parse(raw) as Record<string, unknown>;
+        if (!cancelled) {
+          if (typeof draft.active === "string" && modules.some(module => module.key === draft.active)) setActive(draft.active as ModuleKey);
+          if (draft.createValues && typeof draft.createValues === "object") setCreateValues(draft.createValues as Record<string, string>);
+          if (draft.form && typeof draft.form === "object") setForm(draft.form as typeof form);
+          if (draft.lateForm && typeof draft.lateForm === "object") setLateForm(draft.lateForm as typeof lateForm);
+          if (draft.justificationForm && typeof draft.justificationForm === "object") setJustificationForm(draft.justificationForm as typeof justificationForm);
+          if (draft.ruleForm && typeof draft.ruleForm === "object") setRuleForm(draft.ruleForm as typeof ruleForm);
+          if (draft.applyRuleForm && typeof draft.applyRuleForm === "object") setApplyRuleForm(draft.applyRuleForm as typeof applyRuleForm);
+          if (typeof draft.showCreate === "boolean") setShowCreate(draft.showCreate);
+          setOfflineDraftSavedAt(typeof draft.savedAt === "string" ? draft.savedAt : null);
+          setOfflineDraftRestored(true);
+        }
+      }
+    } catch {
+      if (!cancelled) setError("Le brouillon local n’a pas pu être lu. Il n’a pas été envoyé au serveur.");
+    }
+    if (!cancelled) setOfflineDraftLoadedFor(userId);
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || offlineDraftLoadedFor !== user.id) return;
+    const savedAt = new Date().toISOString();
+    const draft = {
+      version: 1,
+      savedAt,
+      active,
+      createValues,
+      form,
+      lateForm,
+      justificationForm,
+      ruleForm,
+      applyRuleForm,
+      showCreate,
+    };
+    try {
+      localStorage.setItem(`aero_operational_draft_v1:${user.id}`, JSON.stringify(draft));
+      setOfflineDraftSavedAt(savedAt);
+    } catch {
+      setError("Impossible de sauvegarder le brouillon local (stockage du navigateur indisponible ou plein).");
+    }
+  }, [user?.id, offlineDraftLoadedFor, active, createValues, form, lateForm, justificationForm, ruleForm, applyRuleForm, showCreate]);
+
+  const clearOfflineOperationalDraft = () => {
+    if (!user?.id) return;
+    try { localStorage.removeItem(`aero_operational_draft_v1:${user.id}`); } catch {}
+    setCreateValues({});
+    setForm({ code: "", name: "", duration: "", description: "" });
+    setLateForm({ person_type: "student", person_id: "", planned_time: "08:00", arrived_time: "", amount_fcfa: "", method: "cash", provider: "", transaction_reference: "", reason: "" });
+    setJustificationForm({ attendance_id: "", reason_type: "medical", reason: "", document_url: "" });
+    setRuleForm({ formation_id: "", penalty_type: "late_arrival", description: "", target_scope: "students", application_mode: "automatic", applies_after_time: "", min_delay_minutes: "1", max_delay_minutes: "20", tolerance_minutes: "0", amount_fcfa: "1000" });
+    setApplyRuleForm({ rule_id: "", person_id: "" });
+    setShowCreate(false);
+    setOfflineDraftSavedAt(null);
+    setOfflineDraftRestored(false);
+    setNotice("Brouillon opérationnel local supprimé de cet appareil. Aucune donnée serveur n’a été modifiée.");
+  };
 
   const loadIdentity = useCallback(async (current: User) => {
     // Secure server-side lookup avoids the profile/formation RLS read failure in the learner workspace.
@@ -1044,7 +1119,13 @@ export default function Home() {
     <section className="main-area">
       <header className="topbar"><div style={{display:"flex",alignItems:"center",gap:12}}><button className="btn mobile-menu" onClick={()=>setMobileNav(!mobileNav)}>☰</button><div><div className="breadcrumb">Aéro Service / {activeModule.label}</div><div className="topbar-title">{activeModule.label}</div></div></div><div className="top-actions"><button className="icon-btn" title="Actualiser" onClick={()=>{void loadCounts();if(active!=="dashboard"&&active!=="settings")void loadRows(active);}}>↻</button><div className="user-chip"><div className="avatar">{initials(fullName)}</div><div className="user-meta"><div className="user-name">{fullName}</div><div className="user-role">{roles.map(r=>r.name).join(" · ")||"Compte connecté"}</div></div></div><button className="btn" onClick={handleSignOut}>Déconnexion</button></div></header>
       <main className="content">
-        {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>}
+        <section className="offline-draft-panel" style={{marginBottom:16,padding:14,border:"1px solid #d8e1ec",borderRadius:12,background:"#f7f9fc"}} aria-live="polite">
+          <strong>Brouillon de travail sur cet appareil</strong>
+          <p style={{margin:"6px 0",fontSize:13}}>Les champs opérationnels sont sauvegardés localement pour éviter de les perdre si la connexion coupe. Ils ne sont jamais envoyés automatiquement et ne constituent ni une inscription validée, ni un paiement reçu, ni une décision officielle. Les mots de passe et les champs de création de compte sont exclus. Le stockage du navigateur n’est pas chiffré : sur un ordinateur partagé, effacez le brouillon après usage.</p>
+          <p style={{margin:"6px 0",fontSize:12,color:"#475569"}}>{offlineDraftSavedAt ? `Dernière sauvegarde locale : ${new Date(offlineDraftSavedAt).toLocaleString("fr-FR")}` : "Aucun brouillon opérationnel sauvegardé pour le moment."}{offlineDraftRestored ? " · Brouillon précédent restauré." : ""}</p>
+          <button type="button" className="btn secondary" onClick={clearOfflineOperationalDraft} disabled={!offlineDraftSavedAt && !offlineDraftRestored} style={{marginTop:6}}>Effacer le brouillon local</button>
+        </section>
+        {error && <div className="toast error-message">{error}</div>}{notice && <div className="toast">{notice}</div>
         {active==="dashboard" && <>
           <div className="page-heading"><div><div className="eyebrow">ESPACE PERSONNEL · {roleLabel.toUpperCase()}</div><h1 className="page-title">Bonjour {fullName.split(" ")[0]} 👋</h1><p className="page-subtitle">{isAdmin ? "Vue globale de l’établissement et accès aux fonctions administratives." : isSecretary ? "Espace secrétariat : inscriptions, suivi des paiements et validation des accès apprenants." : isLearner ? "Votre espace apprenant personnel." : "Retrouvez les outils correspondant à votre fonction."}</p></div>{isAdmin && <button className="btn btn-primary" onClick={()=>{setActive("formations");setShowCreate(true);}}>＋ Nouvelle formation</button>}</div>
           {!isLearner && roleCodes.some(code => ["ACCOUNTING","FINANCE"].includes(code)) && <div className="stats-grid">
