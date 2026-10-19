@@ -4,19 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#123b63">
-<title>Aéro Service — mode hors connexion</title>
+<title>Aéro Service — secours hors connexion</title>
 <style>
-body{font:16px system-ui,sans-serif;max-width:680px;margin:10vh auto;padding:24px;color:#172b45;background:#f4f7fb}
-main{background:white;border:1px solid #d7e0ec;border-radius:16px;padding:24px}
-h1{font-size:1.5rem}p{line-height:1.6}.status{font-weight:700;color:#744b00;background:#fff3cd;padding:10px;border-radius:8px}
-a,button{display:inline-block;background:#174ea6;color:white;padding:12px 16px;border-radius:8px;text-decoration:none;border:0;cursor:pointer;font:inherit}
+*{box-sizing:border-box}body{font:16px system-ui,sans-serif;max-width:760px;margin:4vh auto;padding:16px;color:#172b45;background:#f4f7fb}
+main{background:white;border:1px solid #d7e0ec;border-radius:16px;padding:22px}
+h1{font-size:1.55rem}h2{font-size:1.15rem;margin-top:24px}p{line-height:1.55}.status{font-weight:700;color:#744b00;background:#fff3cd;padding:10px;border-radius:8px}
+label{display:grid;gap:5px;margin:10px 0;font-weight:600;font-size:14px}input,select,textarea,button{font:inherit;padding:10px;border:1px solid #bdcada;border-radius:8px;width:100%}button,.link{display:inline-block;background:#174ea6;color:white;padding:11px 14px;border-radius:8px;text-decoration:none;border:0;cursor:pointer;font-weight:700}.secondary{background:#fff;color:#174ea6;border:1px solid #bdcada}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{width:auto}.small{font-size:12px;color:#5b6b7e}.item{border:1px solid #d7e0ec;border-radius:9px;padding:10px;margin:8px 0;overflow-wrap:anywhere}
 </style>
 </head>
 <body><main>
-<h1>Aéro Service</h1>
-<p class="status">Mode hors connexion — données serveur non actualisées</p>
-<p>Cette page de secours est disponible sans Internet. Elle ne permet pas de confirmer une présence officielle, un paiement, un reçu ou une pénalité.</p>
-<p>Pour une arrivée pendant la panne, utilisez le registre de secours validé par la Direction, puis régularisez les événements au retour de la connexion.</p>
-<p><a href="/presence/borne">Essayer la borne de présence</a></p>
-<button onclick="location.reload()">Réessayer la connexion</button>
-</main></body></html>
+<h1>Aéro Service — mode de secours</h1>
+<p class="status" role="status">Hors connexion — les données du serveur ne sont pas actualisées.</p>
+<p>Cette page permet de noter localement le travail à reprendre si les écrans habituels ne chargent pas. Les notes ne sont pas des inscriptions, paiements, reçus, présences ou pénalités officiels. Ne saisissez aucun mot de passe ni aucune donnée bancaire ou médicale.</p>
+<form id="noteForm">
+<label>Type d’opération<select id="category">
+<option>Inscription / dossier</option><option>Paiement à vérifier</option><option>Validation à effectuer</option><option>Présence / retard / absence</option><option>Pénalité à examiner</option><option>Formation / planning</option><option>Suivi / alerte</option><option>Autre opération</option>
+</select></label>
+<label>Référence / matricule (facultatif)<input id="reference" maxlength="120"></label>
+<label>Détails à reprendre<textarea id="details" required minlength="3" maxlength="1500" rows="3"></textarea></label>
+<label>Montant indicatif (facultatif)<input id="amount" maxlength="40" placeholder="Non validé"></label>
+<button type="submit">Enregistrer la note sur cet appareil</button>
+</form>
+<p id="message" role="status" aria-live="polite"></p>
+<h2>Notes locales : <span id="count">0</span></h2>
+<div class="actions"><button id="export" type="button" class="secondary">Exporter CSV</button><button id="refresh" type="button" class="secondary">Réessayer la connexion</button><a class="link" href="/presence/borne">Essayer la borne</a></div>
+<div id="items"></div>
+<p class="small">Les notes sont conservées dans le stockage local de ce navigateur sans chiffrement. Elles utilisent le même carnet local que la plateforme lorsqu’elle peut se charger. Exportez une copie et tenez également un registre papier pendant la panne. Une note marquée « Terminé » ne confirme pas une opération officielle.</p>
+</main>
+<script>
+(function(){
+const KEY="aero_offline_workpad_v1";
+const categories=["Inscription / dossier","Paiement à vérifier","Validation à effectuer","Présence / retard / absence","Pénalité à examiner","Formation / planning","Suivi / alerte","Autre opération"];
+const el=id=>document.getElementById(id);
+const read=()=>{try{const v=JSON.parse(localStorage.getItem(KEY)||"[]");return Array.isArray(v)?v:[]}catch(e){return []}};
+const write=items=>{try{localStorage.setItem(KEY,JSON.stringify(items));return true}catch(e){el("message").textContent="Stockage indisponible. Exportez si possible et utilisez le registre papier.";return false}};
+function csvCell(v){return '"'+String(v==null?"":v).replace(/"/g,'""')+'"'}
+function render(){
+ const items=read();el("count").textContent=String(items.length);const host=el("items");host.replaceChildren();
+ items.slice(0,30).forEach(item=>{const box=document.createElement("div");box.className="item";const strong=document.createElement("strong");strong.textContent=item.category+(item.reference?" — "+item.reference:"");const detail=document.createElement("p");detail.textContent=item.details;const state=document.createElement("p");state.className="small";state.textContent=(item.status||"À reprendre")+" · "+new Date(item.createdAt).toLocaleString("fr-FR");box.append(strong,detail,state);host.append(box)});
+ if(items.length>30){const note=document.createElement("p");note.className="small";note.textContent="Les 30 premières notes sont affichées. L’export contient toutes les notes.";host.append(note)}
+}
+el("noteForm").addEventListener("submit",function(event){
+ event.preventDefault();const details=el("details").value.trim();if(details.length<3){el("message").textContent="Décrivez l’opération à reprendre.";return}
+ const id=crypto&&crypto.randomUUID?crypto.randomUUID():String(Date.now())+"-"+Math.random().toString(16).slice(2);
+ const item={id,category:categories.includes(el("category").value)?el("category").value:"Autre opération",reference:el("reference").value.trim(),details,amount:el("amount").value.trim(),createdAt:new Date().toISOString(),status:"À reprendre"};
+ const items=read();items.unshift(item);if(write(items)){el("noteForm").reset();el("message").textContent="Note conservée localement. Aucune opération officielle n’a été transmise.";render()}
+});
+el("export").addEventListener("click",function(){
+ const items=read();if(!items.length){el("message").textContent="Aucune note à exporter.";return}
+ const headers=["Type d’opération","Référence","Détails à reprendre","Montant indicatif","Statut de reprise","Créé le","ID local"];
+ const rows=items.map(i=>[i.category,i.reference,i.details,i.amount,i.status||"À reprendre",i.createdAt,i.id]);
+ const blob=new Blob(["\uFEFF"+[headers,...rows].map(r=>r.map(csvCell).join(";")).join("\r\n")],{type:"text/csv;charset=utf-8"});
+ const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="aero-service-carnet-hors-connexion.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ el("message").textContent="Export CSV créé. Gardez le fichier en lieu sûr.";
+});
+el("refresh").addEventListener("click",()=>location.reload());
+render();
+})();
+</script>
+</body></html>
