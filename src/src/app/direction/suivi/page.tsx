@@ -172,6 +172,10 @@ export default function DirectionSuiviPage() {
     students: rows.filter((row) => ["student", "apprenant"].includes(row.person_type.toLowerCase())).length
   }), [rows]);
   const formationOptions = useMemo(() => [...new Set([...formations.map((formation) => formation.name), ...sessionRows.map((row) => row.formation_name).filter((name): name is string => Boolean(name))])].sort((a, b) => a.localeCompare(b, "fr")), [formations, sessionRows]);
+  const formationCards = useMemo(() => formationOptions.map((name) => {
+    const records = sessionRows.filter((row) => row.formation_name === name);
+    return { name, total: records.length, late: records.filter((row) => row.status.toLowerCase() === "late").length, absent: records.filter((row) => row.status.toLowerCase() === "absent").length, regularized: records.filter((row) => ["regularized", "regularized_late", "regularised", "regularised_late"].includes(row.status.toLowerCase())).length };
+  }), [formationOptions, sessionRows]);
   const filteredAttendanceRows = useMemo(() => rows.filter((row) => {
     const staff = ["staff", "personnel", "teacher", "enseignant"].includes(row.person_type.toLowerCase());
     if (personTypeFilter === "staff" && !staff) return false;
@@ -227,6 +231,12 @@ export default function DirectionSuiviPage() {
     {error && <div style={styles.error}>{error}</div>}
     <section style={styles.stats}>
       {[["Pointages enregistrés", totals.checkins], ["Retards enregistrés", totals.late], ["Absences enregistrées", totals.absent], ["Personnel", totals.staff], ["Apprenants", totals.students]].map(([label, value]) => <div key={String(label)} style={styles.stat}><div style={styles.muted}>{label}</div><strong style={{ fontSize: 28 }}>{value}</strong></div>)}
+    </section>
+    <section style={styles.card}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}><div><h2 style={styles.h2}>Suivi par formation</h2><p style={styles.muted}>Choisissez une formation pour afficher ses séances et les apprenants concernés sur la période sélectionnée.</p></div><button style={styles.button} onClick={() => { setFormationFilter("all"); setStatusFilter("all"); setPersonTypeFilter("student"); }}>Toutes les formations</button></div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
+        {formationCards.map((item) => <button key={item.name} onClick={() => { setFormationFilter(item.name); setPersonTypeFilter("student"); setStatusFilter("all"); }} style={{ textAlign: "left", padding: 14, borderRadius: 12, border: formationFilter === item.name ? "2px solid #174ea6" : "1px solid #dce4ef", background: formationFilter === item.name ? "#eef5ff" : "#fff", color: "#16253b", cursor: "pointer" }}><strong style={{ display: "block", marginBottom: 10 }}>{item.name}</strong><div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 5 }}><div><div style={styles.muted}>Séances</div><strong>{item.total}</strong></div><div><div style={styles.muted}>Retards</div><strong style={{ color: "#9a2727" }}>{item.late}</strong></div><div><div style={styles.muted}>Absences</div><strong style={{ color: "#80500a" }}>{item.absent}</strong></div></div>{item.total === 0 && <div style={{ ...styles.muted, marginTop: 8 }}>Aucune séance chargée pour cette période</div>}{item.regularized > 0 && <div style={{ ...styles.muted, marginTop: 7 }}>Régularisés : {item.regularized}</div>}</button>)}
+      </div>
     </section>
     <section style={styles.card}>
       <h2 style={styles.h2}>Personnes les plus souvent en retard</h2>
