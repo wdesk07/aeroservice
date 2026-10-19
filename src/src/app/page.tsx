@@ -530,6 +530,7 @@ export default function Home() {
 
   async function createPenaltyRule(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     const allowed = roles.some(role => ["DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
     if (!allowed || !user) { setError("Seule la Direction ou le pré-administrateur peut créer ou modifier une règle générale."); return; }
     if (ruleForm.application_mode === "automatic" && ruleForm.penalty_type !== "late_arrival") { setError("Pour le moment, l’application automatique est disponible pour les retards enregistrés au pointage. Utilisez le mode manuel pour les autres motifs."); return; }
@@ -567,6 +568,7 @@ export default function Home() {
 
   async function applyPenaltyRule(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     // Match the current Supabase RLS policy for penalties; ADMIN alone is not granted this write policy.
     const allowed = roles.some(role => ["DIRECTOR","PRE_ADMIN","SECRETARIAT"].includes(role.code.toUpperCase()));
     if (!allowed || !user) { setError("Votre rôle ne permet pas d’appliquer une règle de pénalité."); return; }
@@ -590,6 +592,7 @@ export default function Home() {
 
   async function createAccountForRegistration(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     if (!canCreateStaffAccount) { setError("Seul le secrétariat ou la direction peut créer un compte."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
@@ -662,6 +665,7 @@ export default function Home() {
   }
   async function createModuleRecord(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     const canRecordPayment = roles.some(role => ["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
     const canCreatePenalty = roles.some(role => ["SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE","DIRECTOR","PRE_ADMIN","ADMIN"].includes(role.code.toUpperCase()));
     const canCreateActiveRecord = active === "payments" ? canRecordPayment : active === "penalties" ? canCreatePenalty : (isAdmin || (isSecretary && active === "registrations"));
@@ -726,6 +730,7 @@ export default function Home() {
   }
 
   async function openAttendancePenalty(row: Record<string, unknown>) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     const allowed = roles.some(role => ["DIRECTOR", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"].includes(role.code.toUpperCase()));
     if (!user || !allowed) { setError("Votre rôle ne permet pas de gérer la régularisation des retards."); return; }
     if (String(row.status ?? "").toLowerCase() !== "late") { setError("Cette ligne n’est pas un retard à régulariser."); return; }
@@ -770,6 +775,7 @@ export default function Home() {
 
   async function registerLateArrival(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     if (!user || !lateForm.person_id || Number(lateForm.amount_fcfa) <= 0 || (!isAdmin && lateForm.person_type !== "student")) {
       setError("Choisissez un apprenant et saisissez un montant payé supérieur à zéro. Seule la direction peut valider l’accès du personnel.");
       return;
@@ -871,6 +877,7 @@ export default function Home() {
   }
 
   async function validatePayment(payment: Record<string, unknown>) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     const canValidate = roles.some(role => ["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
     if (!user || !canValidate) { setError("Vous n’avez pas l’autorisation de valider ce paiement."); return; }
     const paymentId = String(payment.id ?? "");
@@ -897,6 +904,7 @@ export default function Home() {
   }
 
   async function reviewRegistration(registration: Record<string, unknown>, decision: "approved" | "rejected") {
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     if (!user || !isSecretary) {
       setError("Vous n’avez pas l’autorisation de traiter cette inscription. Reconnectez-vous avec le compte du secrétariat.");
       return;
@@ -928,6 +936,7 @@ export default function Home() {
 
   async function submitAbsenceJustification(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     if (!user) { setError("Reconnectez-vous pour envoyer un justificatif."); return; }
     setBusy(true); setError(""); setNotice("");
     const { data, error: rpcError } = await supabase.rpc("submit_absence_justification", {
@@ -940,6 +949,7 @@ export default function Home() {
   }
 
   async function reviewAbsenceJustification(row: Record<string, unknown>, decision: "approved" | "rejected") {
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
     setBusy(true); setError(""); setNotice("");
     const { data, error: rpcError } = await supabase.rpc("review_absence_justification", {
       p_justification_id: String(row.id ?? ""), p_decision: decision,
@@ -951,7 +961,8 @@ export default function Home() {
   }
 
   async function createFormation(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setBusy(true); setError(""); setNotice("");
+    e.preventDefault();
+    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; } setBusy(true); setError(""); setNotice("");
     const { error: insertError } = await supabase.from("formations").insert({ code: form.code.trim(), name: form.name.trim(), duration: form.duration.trim() || null, description: form.description.trim() || null });
     if (insertError) setError(insertError.message);
     else { setNotice("Formation créée."); setForm({ code: "", name: "", duration: "", description: "" }); setShowCreate(false); await loadRows("formations"); await loadCounts(); }
