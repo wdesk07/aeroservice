@@ -27,6 +27,7 @@ const categories = [
 export default function OfflineWorkpad() {
   const [online, setOnline] = useState(true);
   const [items, setItems] = useState<OfflineWorkItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState(categories[0]);
   const [reference, setReference] = useState("");
@@ -47,6 +48,7 @@ export default function OfflineWorkpad() {
         if (Array.isArray(parsed)) setItems(parsed);
       }
     } catch { /* Keep the workpad usable if local storage is unavailable. */ }
+    finally { setLoaded(true); }
     return () => {
       window.removeEventListener("online", refresh);
       window.removeEventListener("offline", refresh);
@@ -54,10 +56,12 @@ export default function OfflineWorkpad() {
   }, []);
 
   useEffect(() => {
+    // Do not overwrite existing notes with the initial empty state before the first read finishes.
+    if (!loaded) return;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {
       setMessage("Le navigateur n’a pas pu conserver les notes. Exportez-les ou utilisez aussi un registre papier.");
     }
-  }, [items]);
+  }, [items, loaded]);
 
   function saveItem(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,7 +116,7 @@ export default function OfflineWorkpad() {
         <h2 style={{ margin: "0 0 6px", fontSize: 17 }}>Carnet de reprise Aéro Service</h2>
         <p style={{ fontSize: 12, lineHeight: 1.45, marginTop: 0, color: "#5c440f" }}>
           {online ? "Pour noter les opérations à reprendre ou vérifier après une panne." : "Mode hors connexion : notez le travail à reprendre."}
-          {" "}Ces notes restent dans ce navigateur ; elles ne sont pas envoyées automatiquement au serveur.
+          {" "}Ces notes restent dans ce navigateur ; elles ne sont pas envoyées automatiquement au serveur. N’y inscrivez pas de mot de passe, de coordonnées bancaires, ni de détails médicaux. Sur un ordinateur partagé, utilisez une référence non nominative et effacez les notes après régularisation.
         </p>
         <form onSubmit={saveItem} style={{ display: "grid", gap: 8 }}>
           <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Type d’opération
