@@ -58,6 +58,8 @@ export default function DirectorAgendaPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [filter, setFilter] = useState<"all" | "upcoming" | "past">("upcoming");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsSupported, setNotificationsSupported] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -85,6 +87,44 @@ export default function DirectorAgendaPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const supported = typeof window !== "undefined" && "Notification" in window;
+    setNotificationsSupported(supported);
+    setNotificationsEnabled(supported && Notification.permission === "granted" && window.localStorage.getItem("aero_agenda_browser_notifications") === "on");
+  }, []);
+  useEffect(() => {
+    if (!notificationsEnabled || !notificationsSupported || Notification.permission !== "granted") return;
+    const checkReminders = () => {
+      const now = Date.now();
+      const due = events.filter((event) => event.reminder_at && new Date(event.reminder_at).getTime() <= now && new Date(event.starts_at).getTime() >= now - 24 * 60 * 60 * 1000);
+      let alreadyNotified: string[] = [];
+      try { alreadyNotified = JSON.parse(window.localStorage.getItem("aero_agenda_notified_v1") || "[]"); } catch { alreadyNotified = []; }
+      const known = new Set(alreadyNotified);
+      for (const event of due) {
+        if (known.has(event.id)) continue;
+        const body = `${dateLabel(event.starts_at)}${event.description ? " · " + event.description : ""}`;
+        try {
+          if ("serviceWorker" in navigator) {
+            void navigator.serviceWorker.ready.then((registration) => registration.showNotification(`Rappel Aéro Service : ${event.title}`, { body, tag: `aero-agenda-${event.id}` })).catch(() => new Notification(`Rappel Aéro Service : ${event.title}`, { body, tag: `aero-agenda-${event.id}` }));
+          } else new Notification(`Rappel Aéro Service : ${event.title}`, { body, tag: `aero-agenda-${event.id}` });
+          known.add(event.id);
+        } catch { /* La notification peut être bloquée par le navigateur ; l’alerte reste visible dans l’Agenda. */ }
+      }
+      window.localStorage.setItem("aero_agenda_notified_v1", JSON.stringify([...known].slice(-500)));
+    };
+    checkReminders();
+    const timer = window.setInterval(checkReminders, 60_000);
+    return () => window.clearInterval(timer);
+  }, [events, notificationsEnabled, notificationsSupported]);
+
+  async function enableBrowserNotifications() {
+    if (!notificationsSupported) { setError("Ce navigateur ne prend pas en charge les notifications."); return; }
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") { setError("Autorisez les notifications dans les paramètres du navigateur pour recevoir les rappels."); return; }
+    window.localStorage.setItem("aero_agenda_browser_notifications", "on");
+    setNotificationsEnabled(true);
+    setNotice("Rappels navigateur activés pour cet appareil lorsque l’Agenda est ouvert.");
+  }
 
   const now = Date.now();
   const reminders = useMemo(() => events.filter((event) => event.reminder_at && new Date(event.reminder_at).getTime() <= now && new Date(event.starts_at).getTime() >= now - 24 * 60 * 60 * 1000), [events, now]);
@@ -141,7 +181,7 @@ export default function DirectorAgendaPage() {
   return <main style={{ minHeight: "100vh", padding: 24, background: "#f3f6fa", color: "#172b45", fontFamily: "Arial,sans-serif" }}>
     <header style={{ maxWidth: 1120, margin: "0 auto 20px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}><img src="/aero-service-logo.svg" alt="Logo officiel Aéro Service" style={{ width: 72, height: 56, objectFit: "contain" }} /><div><div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, color: "#48617f" }}>DIRECTION · ORGANISATION</div><h1 style={{ margin: "5px 0", fontSize: 30 }}>Agenda de l’école</h1><p style={{ ...mutedStyle, margin: 0 }}>Programmes, examens, soutenances, remises et rappels importants.</p></div></div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><a href="/" style={{ ...buttonStyle, background: "#fff", color: "#174ea6", border: "1px solid #cbd5e1", textDecoration: "none" }}>← Tableau de bord</a><button style={buttonStyle} onClick={() => { setForm(blank); setShowForm(!showForm); setError(""); setNotice(""); }}>{showForm ? "Fermer" : "+ Ajouter un événement"}</button></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><a href="/" style={{ ...buttonStyle, background: "#fff", color: "#174ea6", border: "1px solid #cbd5e1", textDecoration: "none" }}>← Tableau de bord</a>{notificationsSupported && Notification.permission !== "denied" && <button style={{ ...buttonStyle, background: notificationsEnabled ? "#e8f7ed" : "#eef3f9", color: notificationsEnabled ? "#17633a" : "#174ea6", border: "1px solid #cbd5e1" }} onClick={() => void enableBrowserNotifications()}>{notificationsEnabled ? "✓ Rappels activés" : "Activer les rappels"}</button>}<button style={buttonStyle} onClick={() => { setForm(blank); setShowForm(!showForm); setError(""); setNotice(""); }}>{showForm ? "Fermer" : "+ Ajouter un événement"}</button></div>
     </header>
     <div style={{ maxWidth: 1120, margin: "0 auto" }}>
       {error && <div role="alert" style={{ marginBottom: 14, padding: 13, borderRadius: 10, color: "#922", background: "#fff0f0", border: "1px solid #f2c7c7" }}>{error}</div>}
@@ -160,7 +200,7 @@ export default function DirectorAgendaPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}><div><h2 style={{ margin: "0 0 5px", fontSize: 19 }}>Planning</h2><p style={{ ...mutedStyle, margin: 0 }}>{events.length} événement(s) enregistré(s)</p></div><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[["upcoming", "À venir"], ["all", "Tout"], ["past", "Passés"]].map(([value, label]) => <button key={value} onClick={() => setFilter(value as typeof filter)} style={{ ...buttonStyle, background: filter === value ? "#174ea6" : "#eef3f9", color: filter === value ? "#fff" : "#29425f" }}>{label}</button>)}<button onClick={() => void load()} style={{ ...buttonStyle, background: "#fff", color: "#174ea6", border: "1px solid #cbd5e1" }}>Actualiser</button></div></div>
         {visibleEvents.length === 0 ? <p style={mutedStyle}>Aucun événement dans cette vue. Ajoutez un programme ou une échéance pour commencer.</p> : <div style={{ display: "grid", gap: 10, marginTop: 14 }}>{visibleEvents.map((event) => <article key={event.id} style={{ border: "1px solid #e0e7f0", borderRadius: 12, padding: 14, display: "flex", gap: 16, justifyContent: "space-between", alignItems: "start", flexWrap: "wrap" }}><div style={{ minWidth: 220, flex: 1 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><strong style={{ fontSize: 16 }}>{event.title}</strong><span style={{ borderRadius: 999, padding: "4px 8px", background: "#edf3fb", color: "#31577f", fontSize: 11, fontWeight: 700 }}>{types.find(([value]) => value === event.event_type)?.[1] ?? "Autre événement"}</span></div><p style={{ margin: "7px 0", fontSize: 13, color: "#334861" }}>Début : {dateLabel(event.starts_at)}{event.ends_at ? ` · Fin : ${dateLabel(event.ends_at)}` : ""}</p>{event.reminder_at && <p style={{ margin: "4px 0", fontSize: 12, color: "#80500a" }}>🔔 Rappel : {dateLabel(event.reminder_at)}</p>}{event.description && <p style={{ ...mutedStyle, margin: "7px 0 0", whiteSpace: "pre-wrap" }}>{event.description}</p>}</div><button onClick={() => void deleteEvent(event)} style={{ ...buttonStyle, background: "#fff0f0", color: "#922", border: "1px solid #f2c7c7" }}>Supprimer</button></article>)}</div>}
       </section>
-      <p style={{ ...mutedStyle, textAlign: "center" }}>Les rappels s’affichent dans l’Agenda lorsque la plateforme est ouverte. Les notifications externes même navigateur fermé ne sont pas encore activées.</p>
+      <p style={{ ...mutedStyle, textAlign: "center" }}>Les rappels apparaissent dans l’Agenda. Après activation, les notifications du navigateur peuvent aussi apparaître lorsque l’onglet est ouvert ou en arrière-plan. Les notifications quand le navigateur est complètement fermé nécessitent un service push supplémentaire.</p>
     </div>
   </main>;
 }
