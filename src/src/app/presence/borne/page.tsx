@@ -418,7 +418,7 @@ export default function PresenceKioskPage() {
         p_radius_m: 100
       });
       if (error || !data?.ok) throw new Error(error?.message || "CHECKPOINT_CONFIG_FAILED");
-      setMessage("Zone GPS du centre enregistrée avec un rayon de 100 m. Cette action doit être faite physiquement à l’entrée d’Aéro Service, pas depuis le domicile.");
+      setMessage("Position GPS du centre enregistrée durablement (rayon de 100 m). La Direction n’a pas à refaire cette autorisation chaque matin. Ne la reconfigurez que si la borne change d’emplacement.");
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Configuration GPS impossible.";
       setMessage(raw.includes("GPS_ACCURACY_TOO_LOW")
@@ -510,11 +510,11 @@ export default function PresenceKioskPage() {
             <p style={{ lineHeight: 1.5, color: "#52647a" }}>La borne de pointage est active automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative. Les boutons ci-dessous servent uniquement à enregistrer l’ouverture et la fermeture d’Aéro Service. Chaque action est horodatée et signalée à la Direction; la fermeture administrative ne désactive pas la borne avant 19 h 00.</p>
             {canConfigureLocation && <div style={{ border: "1px solid #dce4ef", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <strong>Zone GPS du centre</strong>
-              <p style={{ margin: "6px 0 10px", color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>Placez-vous physiquement à l’entrée du centre, activez le GPS puis enregistrez sa position. La zone autorisée est réglée à 100 mètres autour de ce point.</p>
+              <p style={{ margin: "6px 0 10px", color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>Placez-vous physiquement à l’entrée du centre et enregistrez sa position GPS une seule fois. Elle est conservée dans la base et reste valable les jours suivants : ne recommencez pas chaque matin. Reconfigurez-la uniquement si la borne est déplacée ou si la position enregistrée est incorrecte. Zone autorisée : 100 mètres.</p>
               <button type="button" onClick={() => void configureCheckpointLocation()} disabled={busy} style={secondaryButton}>{busy ? "Enregistrement…" : "Enregistrer la position GPS du centre"}</button>
             </div>}
             {deviceRegistered ? (
-              <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée. Le pointage est disponible automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative.</p>
+              <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée durablement sur cet appareil. Le pointage est disponible automatiquement de 08 h 30 à 19 h 00. Aucune nouvelle autorisation quotidienne du GPS n’est nécessaire.</p>
             ) : (
               <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Enregistrer la borne sur cet appareil"}</button>
             )}
