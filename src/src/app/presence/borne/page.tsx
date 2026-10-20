@@ -171,17 +171,30 @@ export default function PresenceKioskPage() {
     setBusy(true);
     setMessage("");
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: identifier.trim(), password });
-      if (error || !data.user) throw new Error("INVALID_CREDENTIALS");
-      const { data: allowed, error: roleError } = await supabase.rpc("has_any_role", {
-        p_roles: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"],
+      // Use the dedicated server-side personnel authenticator so email, staff number,
+      // and public identifier are resolved consistently with the personnel account.
+      const { data: authPayload, error: authError } = await supabase.functions.invoke("personnel-kiosk-auth", {
+        body: { identifier: identifier.trim(), password }
       });
-      if (roleError || allowed !== true) {
-        await supabase.auth.signOut();
-        throw new Error("KIOSK_ADMIN_REQUIRED");
+      let failurePayload: { error?: string } | null = authPayload;
+      if (authError) {
+        const context = (authError as unknown as { context?: unknown }).context;
+        if (context instanceof Response) {
+          try { failurePayload = await context.clone().json(); } catch { failurePayload = null; }
+        }
       }
+      if (authError || !authPayload?.access_token || !authPayload?.refresh_token) {
+        // Do not disguise a function/network/configuration failure as a wrong password.
+        const detail = failurePayload?.error || (authError ? "SERVICE_UNAVAILABLE" : "INVALID_CREDENTIALS");
+        throw new Error(detail);
+      }
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+        access_token: authPayload.access_token,
+        refresh_token: authPayload.refresh_token
+      });
+      if (sessionError || !sessionData.user) throw new Error("SERVICE_UNAVAILABLE");
       setPassword("");
-      setMessage("Connexion réussie. Vous pouvez enregistrer la borne et gérer séparément l’ouverture ou la fermeture de la journée.");
+      setMessage("Connexion du personnel autorisé réussie. Vous pouvez gérer la borne et l’ouverture de la journée.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Connexion impossible."));
     } finally {
@@ -207,7 +220,9 @@ export default function PresenceKioskPage() {
         }
       }
       if (authError || !authPayload?.access_token || !authPayload?.refresh_token) {
-        const detail = failurePayload?.error || (authError ? "INVALID_CREDENTIALS" : "SERVICE_UNAVAILABLE");
+        // If the function did not return a structured auth error, report a service
+        // failure rather than falsely telling a valid user their credentials are wrong.
+        const detail = failurePayload?.error || (authError ? "SERVICE_UNAVAILABLE" : "INVALID_CREDENTIALS");
         throw new Error(detail);
       }
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
@@ -377,7 +392,7 @@ export default function PresenceKioskPage() {
                 <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>La borne n’est pas encore enregistrée sur cet appareil. Un membre autorisé peut se connecter ci-dessous pour l’enregistrer. Après cette première opération, la borne fonctionne automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative.</p>
                 <form onSubmit={loginStaff} style={{ display: "grid", gap: 12, marginTop: 12 }}>
                   <label style={labelStyle}>E-mail professionnel
-                    <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="Votre e-mail professionnel" />
+                    <input autoComplete="username" type="text" autoCapitalize="none" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="E-mail, matricule ou identifiant personnel" />
                   </label>
                   <label style={labelStyle}>Mot de passe
                     <input autoComplete="current-password" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} style={inputStyle} />
@@ -402,7 +417,7 @@ export default function PresenceKioskPage() {
                   <p style={{ color: "#52647a", fontSize: 13, lineHeight: 1.5 }}>Cette gestion est indépendante du pointage automatique de la borne.</p>
                   <form onSubmit={loginStaff} style={{ display: "grid", gap: 12, marginTop: 12 }}>
                     <label style={labelStyle}>E-mail professionnel
-                      <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="Votre e-mail professionnel" />
+                      <input autoComplete="username" type="text" autoCapitalize="none" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="E-mail, matricule ou identifiant personnel" />
                     </label>
                     <label style={labelStyle}>Mot de passe
                       <input autoComplete="current-password" type="password" required value={password} onChange={(event) => setPassword(event.target.value)} style={inputStyle} />
