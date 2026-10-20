@@ -25,7 +25,8 @@ export async function POST(request: Request) {
   }
 
   const response = NextResponse.json({ ok: true, activated: true });
-  const options = { httpOnly: true, secure: true, sameSite: "strict" as const, path: "/api/presence", maxAge: 60 * 60 * 24 * 45 };
+  // Keep the registered kiosk trusted across days and browser restarts. Revoke the device server-side if it is replaced or lost.
+  const options = { httpOnly: true, secure: true, sameSite: "strict" as const, path: "/api/presence", maxAge: 60 * 60 * 24 * 365 * 10 };
   response.cookies.set("aero_presence_kiosk_token", result.device_token, options);
   response.cookies.set("aero_presence_kiosk_device_id", result.device_id, options);
   response.headers.set("Cache-Control", "no-store");
