@@ -32,7 +32,7 @@ export default function QrPosterPage() {
       if (alive) {
         setAuthorized(allowed);
         setCheckingAccess(false);
-        if (allowed) setTargetUrl(window.location.origin + "/presence/qr");
+        if (allowed) setTargetUrl("https://aero-service.vercel.app/presence/qr");
       }
     }
     void verifyAccess();
