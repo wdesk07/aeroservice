@@ -929,6 +929,8 @@ export default function Home() {
         const queuedPayload: Record<string, unknown> = { ...payload, id: String(payload.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2))) };
         const isPenaltyPayment = active === "payments" && String(payload.payment_type) === "penalty";
         let provisionalAmount = 0;
+        let provisionalPenaltyId = "";
+        let provisionalPersonId = "";
         if (isPenaltyPayment) {
           const penaltyId = String(payload.penalty_id || "");
           const linkedPenalty = penaltyOptions.find(item => item.id === penaltyId && item.status === "pending");
@@ -936,10 +938,12 @@ export default function Home() {
           provisionalAmount = Number(linkedPenalty.amount_fcfa || 0);
           if (!Number.isFinite(provisionalAmount) || provisionalAmount <= 0) throw new Error("Le montant de la pénalité n’est pas disponible localement. Ne confirmez pas le paiement.");
           queuedPayload.amount_fcfa = provisionalAmount;
-          saveOfflineAccessOverride(penaltyId, linkedPenalty.person_id, user.id);
+          provisionalPenaltyId = penaltyId;
+          provisionalPersonId = linkedPenalty.person_id;
         }
         queue.push({ id: String(queuedPayload.id), userId: user.id, table: active, payload: queuedPayload, createdAt: new Date().toISOString(), validateAfterSync: isPenaltyPayment, status: "pending" });
         writeOfflineQueue(queue);
+        if (isPenaltyPayment) saveOfflineAccessOverride(provisionalPenaltyId, provisionalPersonId, user.id);
         setNotice(active === "payments" && isPenaltyPayment
           ? "CONFIRMATION PROVISOIRE — règlement de " + provisionalAmount.toLocaleString("fr-FR") + " FCFA enregistré sur cet ordinateur. L’accès au cours est autorisé provisoirement. Le reçu officiel sera disponible après synchronisation avec le serveur."
           : active === "payments"
