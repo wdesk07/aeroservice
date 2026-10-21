@@ -141,6 +141,59 @@ export default function Home() {
   const [offlineDraftRestored, setOfflineDraftRestored] = useState(false);
 
   useEffect(() => {
+    if (!user?.id) return;
+    let running = false;
+    const syncOfflineQueue = async () => {
+      if (running || !navigator.onLine) return;
+      running = true;
+      try {
+        const queue = readOfflineQueue();
+        const remaining: OfflineQueuedOperation[] = [];
+        for (const item of queue) {
+          if (item.userId !== user.id) { remaining.push(item); continue; }
+          try {
+            // Check by stable local UUID first so a retry never inserts a duplicate after a partial success.
+            const existing = await supabase.from(item.table).select("id,status").eq("id", item.id).maybeSingle();
+            if (existing.error) throw new Error(existing.error.message);
+            let syncedRow: any = existing.data;
+            if (!syncedRow) {
+              const inserted = await supabase.from(item.table).insert(item.payload).select("id,status").single();
+              if (inserted.error || !inserted.data) throw new Error(inserted.error?.message || "Le serveur n’a pas confirmé l’enregistrement.");
+              syncedRow = inserted.data;
+            }
+            if (item.validateAfterSync && item.table === "payments" && String(syncedRow.status).toLowerCase() !== "validated") {
+              const validated = await supabase.from("payments").update({ status: "validated" }).eq("id", item.id).eq("status", "pending").select("id,status").maybeSingle();
+              if (validated.error || String(validated.data?.status).toLowerCase() !== "validated") throw new Error(validated.error?.message || "Le paiement est transmis, mais sa validation officielle reste à confirmer.");
+            }
+            if (item.table === "payments" && item.validateAfterSync && item.payload.penalty_id) {
+              try {
+                const access = JSON.parse(localStorage.getItem(OFFLINE_ACCESS_KEY) || "[]");
+                const next = (Array.isArray(access) ? access : []).map((x: any) => x.penaltyId === item.payload.penalty_id ? { ...x, provisional: false, serverConfirmed: true, syncedAt: new Date().toISOString() } : x);
+                localStorage.setItem(OFFLINE_ACCESS_KEY, JSON.stringify(next));
+              } catch {}
+            }
+          } catch (syncError) {
+            remaining.push({ ...item, status: "error", error: syncError instanceof Error ? syncError.message : "Échec de synchronisation" });
+          }
+        }
+        // Keep other users' operations and failures; only remove fully synchronized records.
+        writeOfflineQueue(remaining);
+        if (remaining.some(item => item.userId === user.id)) {
+          setNotice("Synchronisation partielle : certaines opérations restent en attente. Ouvrez le dossier concerné et réessayez après vérification.");
+        } else if (queue.some(item => item.userId === user.id)) {
+          setNotice("Synchronisation terminée : les opérations en attente ont été transmises au serveur.");
+          await loadCounts();
+          await loadRows(active);
+        }
+      } catch (syncError) {
+        setError(syncError instanceof Error ? syncError.message : "La file hors connexion n’a pas pu être synchronisée.");
+      } finally { running = false; }
+    };
+    void syncOfflineQueue();
+    window.addEventListener("online", syncOfflineQueue);
+    return () => window.removeEventListener("online", syncOfflineQueue);
+  }, [user?.id]);
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requestedModule = params.get("module");
     const personId = params.get("person_id") || "";
@@ -336,9 +389,12 @@ export default function Home() {
     }
     if (user && typeof navigator !== "undefined" && !navigator.onLine) {
       const cachedRows = readOfflineSnapshot<Record<string, unknown>[]>(user.id, `module_${key}`);
-      if (cachedRows) {
-        setRows(cachedRows);
-        setError("Mode hors connexion : affichage d’une copie locale pouvant dater de 24 heures. Consultation uniquement ; aucune modification n’est confirmée.");
+      const queuedRows = user ? readOfflineQueue().filter(item => item.userId === user.id && item.table === key).map(item => ({ ...item.payload, status: item.table === "payments" ? "pending" : String(item.payload.status || "pending"), offline_pending_sync: true, offline_queue_error: item.error || null, offline_created_at: item.createdAt })) : [];
+      if (cachedRows || queuedRows.length) {
+        const baseRows = cachedRows ?? [];
+        const mergedRows = [...queuedRows, ...baseRows.filter(row => !queuedRows.some(q => String(q.id) === String(row.id)))];
+        setRows(mergedRows);
+        setError("Mode hors connexion : les dossiers marqués « En attente de synchronisation » sont conservés sur cet ordinateur. Ils ne sont pas encore confirmés par le serveur.");
       } else {
         setRows([]);
         setError("Mode hors connexion : aucune copie locale disponible pour ce module. Reconnectez-vous pour charger les données.");
