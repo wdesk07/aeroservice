@@ -463,7 +463,8 @@ export default function PresenceKioskPage() {
         // It remains explicitly provisional until the server confirms synchronization.
         try {
           const overrides = JSON.parse(localStorage.getItem("aero_service_offline_access_overrides_v1") || "[]");
-          const override = (Array.isArray(overrides) ? overrides : []).find((item: any) => item.personId === user.id && item.authorized === true);
+          const todayBenin = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Porto-Novo" });
+          const override = (Array.isArray(overrides) ? overrides : []).find((item: any) => item.personId === user.id && item.authorized === true && item.day === todayBenin);
           if (override) resultToShow = { ...resultToShow, status: "regularized", provisional_access: Boolean(override.provisional), duplicate: false };
         } catch {}
         setResult(resultToShow);
