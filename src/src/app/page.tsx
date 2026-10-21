@@ -928,15 +928,20 @@ export default function Home() {
         const queue = readOfflineQueue();
         const queuedPayload = { ...payload, id: String(payload.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2))) };
         const isPenaltyPayment = active === "payments" && String(payload.payment_type) === "penalty";
+        let provisionalAmount = 0;
         if (isPenaltyPayment) {
           const penaltyId = String(payload.penalty_id || "");
-          if (!penaltyId) throw new Error("Aucune pénalité existante n’est liée à ce règlement. Connectez-vous pour créer le dossier de pénalité.");
-          saveOfflineAccessOverride(penaltyId, String(payload.person_id || ""), user.id);
+          const linkedPenalty = penaltyOptions.find(item => item.id === penaltyId && item.status === "pending");
+          if (!penaltyId || !linkedPenalty) throw new Error("Aucune pénalité en attente n’est liée à ce règlement. Actualisez la liste lorsque la connexion revient.");
+          provisionalAmount = Number(linkedPenalty.amount_fcfa || 0);
+          if (!Number.isFinite(provisionalAmount) || provisionalAmount <= 0) throw new Error("Le montant de la pénalité n’est pas disponible localement. Ne confirmez pas le paiement.");
+          queuedPayload.amount_fcfa = provisionalAmount;
+          saveOfflineAccessOverride(penaltyId, linkedPenalty.person_id, user.id);
         }
         queue.push({ id: String(queuedPayload.id), userId: user.id, table: active, payload: queuedPayload, createdAt: new Date().toISOString(), validateAfterSync: isPenaltyPayment, status: "pending" });
         writeOfflineQueue(queue);
         setNotice(active === "payments" && isPenaltyPayment
-          ? "CONFIRMATION PROVISOIRE — règlement enregistré sur cet ordinateur. L’accès au cours est autorisé provisoirement. Le reçu officiel sera disponible après synchronisation avec le serveur."
+          ? "CONFIRMATION PROVISOIRE — règlement de " + provisionalAmount.toLocaleString("fr-FR") + " FCFA enregistré sur cet ordinateur. L’accès au cours est autorisé provisoirement. Le reçu officiel sera disponible après synchronisation avec le serveur."
           : active === "payments"
             ? "Paiement conservé localement en attente de synchronisation. Il n’est pas encore confirmé sur le serveur."
             : "Dossier conservé sur cet ordinateur — EN ATTENTE DE SYNCHRONISATION. Il sera transmis au serveur dès le retour d’Internet.");
