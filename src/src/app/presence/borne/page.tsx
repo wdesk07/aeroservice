@@ -31,6 +31,8 @@ function errorMessage(raw: string) {
     TOO_MANY_ATTEMPTS: "Trop de tentatives. Attendez quinze minutes avant de réessayer.",
     SERVICE_UNAVAILABLE: "Le service de connexion est temporairement indisponible. Réessayez plus tard.",
     ACTIVE_STUDENT_REQUIRED: "Ce compte n’est pas un compte apprenant actif autorisé au pointage.",
+    ACTIVE_PERSONNEL_REQUIRED: "Ce compte n’est pas un compte du personnel actif autorisé au pointage.",
+    PERSONNEL_CHECKIN_CLOSED: "Le pointage du personnel est disponible uniquement de 08 h 30 à 19 h 00.",
     STUDENT_CHECKIN_CLOSED: "La période de pointage quotidien est fermée.",
     CHECKIN_WINDOW_CLOSED: "La séance est terminée. Aucun nouveau pointage n’est accepté pour cette séance.",
     OUTSIDE_CHECKPOINT_RADIUS: "La position détectée est hors de la zone autorisée du centre.",
@@ -44,6 +46,7 @@ export default function PresenceKioskPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPersonnel, setIsPersonnel] = useState(false);
   const [canManageOperatingDay, setCanManageOperatingDay] = useState(false);
   const [canConfigureLocation, setCanConfigureLocation] = useState(false);
   const [deviceRegistered, setDeviceRegistered] = useState(false);
@@ -66,6 +69,7 @@ export default function PresenceKioskPage() {
       setUser(nextUser);
       if (!nextUser) {
         setIsAdmin(false);
+        setIsPersonnel(false);
         setCanManageOperatingDay(false);
         setCanConfigureLocation(false);
         setLoading(false);
@@ -74,13 +78,15 @@ export default function PresenceKioskPage() {
       // Use the database role-check function instead of selecting user_roles directly.
       // Row-level security can hide the role rows from ordinary staff accounts and make
       // the operating-day controls disappear even when the server authorizes that person.
-      const [{ data: adminAccess }, { data: operatingDayAccess }, { data: locationAccess }] = await Promise.all([
+      const [{ data: adminAccess }, { data: operatingDayAccess }, { data: locationAccess }, { data: personnelAccess }] = await Promise.all([
         supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
         supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"] }),
         supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN"] }),
+        supabase.rpc("has_any_role", { role_codes: ["DIRECTOR", "ADMIN", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE", "STAFF", "PERSONNEL", "TEACHER", "ENSEIGNANT", "PEDAGOGY", "PEDAGOGIE", "ACCOUNTING", "FINANCE"] }),
       ]);
       if (alive) {
         setIsAdmin(adminAccess === true);
+        setIsPersonnel(personnelAccess === true);
         setCanManageOperatingDay(operatingDayAccess === true);
         setCanConfigureLocation(locationAccess === true);
         setLoading(false);
@@ -246,6 +252,36 @@ export default function PresenceKioskPage() {
     }
   }
 
+  async function recordPersonnelPresence() {
+    if (!deviceRegistered || !user || !isPersonnel) {
+      setMessage("Connectez-vous avec un compte du personnel actif sur la borne enregistrée.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("AUTH_REQUIRED");
+      const response = await fetch("/api/presence/personnel-checkin", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "SERVICE_UNAVAILABLE");
+      setMessage(payload.duplicate ? "Votre présence du jour était déjà enregistrée." : "Présence du personnel enregistrée sur le serveur.");
+    } catch (error) {
+      setMessage(errorMessage(error instanceof Error ? error.message : "Pointage du personnel impossible."));
+    } finally {
+      await supabase.auth.signOut();
+      setPassword("");
+      setIdentifier("");
+      setUser(null);
+      setBusy(false);
+    }
+  }
+
   async function configureCheckpointLocation() {
     if (!canConfigureLocation) {
       setMessage("Seule la Direction ou la pré-administration peut configurer le GPS du centre.");
@@ -326,15 +362,9 @@ export default function PresenceKioskPage() {
       }
     };
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => void submit(position),
-        () => void submit(),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-      );
-    } else {
-      await submit();
-    }
+    // The official kiosk is registered at the centre and its GPS checkpoint is stored
+    // server-side. Do not prompt every learner to re-share or re-register GPS at each scan.
+    await submit();
   }
 
   const timestamp = result?.arrived_at
@@ -380,6 +410,14 @@ export default function PresenceKioskPage() {
               <button type="button" onClick={() => void openOperatingDay()} disabled={busy} style={secondaryButton}>Enregistrer l’ouverture administrative de la journée</button>
             )}
             <button type="button" onClick={() => void signOut()} disabled={busy} style={secondaryButton}>Se déconnecter et laisser la borne disponible</button>
+          </div>
+        )}
+
+        {!loading && user && isPersonnel && deviceRegistered && (
+          <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <h2 style={{ marginTop: 0, fontSize: 18 }}>Pointage du personnel</h2>
+            <p style={{ color: "#52647a", lineHeight: 1.5 }}>Votre compte personnel est reconnu. Enregistrez votre présence sur la borne officielle; la position GPS du centre déjà enregistrée est conservée et ne doit pas être configurée à nouveau.</p>
+            <button type="button" onClick={() => void recordPersonnelPresence()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Enregistrer ma présence"}</button>
           </div>
         )}
 
