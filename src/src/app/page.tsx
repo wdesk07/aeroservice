@@ -389,7 +389,7 @@ export default function Home() {
     }
     if (user && typeof navigator !== "undefined" && !navigator.onLine) {
       const cachedRows = readOfflineSnapshot<Record<string, unknown>[]>(user.id, `module_${key}`);
-      const queuedRows = user ? readOfflineQueue().filter(item => item.userId === user.id && item.table === key).map(item => ({ ...item.payload, status: item.table === "payments" ? "pending" : String(item.payload.status || "pending"), offline_pending_sync: true, offline_queue_error: item.error || null, offline_created_at: item.createdAt })) : [];
+      const queuedRows: Record<string, unknown>[] = user ? readOfflineQueue().filter(item => item.userId === user.id && item.table === key).map(item => ({ ...item.payload, status: item.table === "payments" ? "pending" : String(item.payload.status || "pending"), offline_pending_sync: true, offline_queue_error: item.error || null, offline_created_at: item.createdAt })) : [];
       if (cachedRows || queuedRows.length) {
         const baseRows = cachedRows ?? [];
         const mergedRows = [...queuedRows, ...baseRows.filter(row => !queuedRows.some(q => String(q.id) === String(row.id)))];
@@ -926,7 +926,7 @@ export default function Home() {
       }
       try {
         const queue = readOfflineQueue();
-        const queuedPayload = { ...payload, id: String(payload.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2))) };
+        const queuedPayload: Record<string, unknown> = { ...payload, id: String(payload.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2))) };
         const isPenaltyPayment = active === "payments" && String(payload.payment_type) === "penalty";
         let provisionalAmount = 0;
         if (isPenaltyPayment) {
