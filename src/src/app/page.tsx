@@ -926,7 +926,7 @@ export default function Home() {
       }
       try {
         const queue = readOfflineQueue();
-        const queuedPayload = { ...payload, id: String(payload.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2)) };
+        const queuedPayload = { ...payload, id: String(payload.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2))) };
         const isPenaltyPayment = active === "payments" && String(payload.payment_type) === "penalty";
         if (isPenaltyPayment) {
           const penaltyId = String(payload.penalty_id || "");
