@@ -28,6 +28,7 @@ type AttendanceResult = {
   checkpoint?: string;
   person_name?: string;
   full_name?: string;
+  provisional_access?: boolean;
 };
 
 function errorMessage(raw: string) {
@@ -457,8 +458,18 @@ export default function PresenceKioskPage() {
         });
         const payload = await response.json();
         if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Le serveur n’a pas confirmé le pointage.");
-        setResult(payload);
-        setMessage(payload.duplicate ? "Votre présence avait déjà été enregistrée aujourd’hui." : "Pointage confirmé par le serveur.");
+        let resultToShow = payload as AttendanceResult;
+        // Same-browser provisional override: the secretariat records the payment on this computer.
+        // It remains explicitly provisional until the server confirms synchronization.
+        try {
+          const overrides = JSON.parse(localStorage.getItem("aero_service_offline_access_overrides_v1") || "[]");
+          const override = (Array.isArray(overrides) ? overrides : []).find((item: any) => item.personId === user.id && item.authorized === true);
+          if (override) resultToShow = { ...resultToShow, status: "regularized", provisional_access: Boolean(override.provisional), duplicate: false };
+        } catch {}
+        setResult(resultToShow);
+        setMessage(resultToShow.provisional_access
+          ? "RÈGLEMENT PROVISOIRE retrouvé sur cet ordinateur. Accès au cours autorisé en attendant la synchronisation."
+          : payload.duplicate ? "Votre présence avait déjà été enregistrée aujourd’hui." : "Pointage confirmé par le serveur.");
       } catch (error) {
         setMessage(errorMessage(error instanceof Error ? error.message : "Pointage impossible."));
       } finally {
@@ -631,7 +642,7 @@ export default function PresenceKioskPage() {
         {result && (
           <div role="status" style={{ marginTop: 12, padding: 22, borderRadius: 14, border: "2px solid", borderColor: result.duplicate ? "#b7791f" : result.status === "late" ? "#c62828" : "#21834a", background: result.duplicate ? "#fff7e6" : result.status === "late" ? "#fff0f0" : "#eaf7ef", color: result.duplicate ? "#80500a" : result.status === "late" ? "#9a1717" : "#17633a", textAlign: "center", lineHeight: 1.5 }}>
             <div style={{fontSize:13,fontWeight:800,letterSpacing:1,marginBottom:8}}>RÉSULTAT DU POINTAGE</div>
-            <strong style={{display:"block",fontSize:30,lineHeight:1.2,marginBottom:10}}>{result.duplicate ? "PRÉSENCE DÉJÀ ENREGISTRÉE" : result.status === "late" ? "EN RETARD — PÉNALITÉ À RÉGLER" : "À L’HEURE — ACCÈS AUTORISÉ"}</strong>
+            <strong style={{display:"block",fontSize:30,lineHeight:1.2,marginBottom:10}}>{result.provisional_access ? "RÈGLEMENT PROVISOIRE — ACCÈS AUTORISÉ" : result.duplicate ? "PRÉSENCE DÉJÀ ENREGISTRÉE" : result.status === "late" ? "EN RETARD — PÉNALITÉ À RÉGLER" : "À L’HEURE — ACCÈS AUTORISÉ"}</strong>
             <div style={{fontSize:20,fontWeight:700,marginBottom:10}}>{result.person_name || result.full_name || user?.email || "Apprenant"}</div>
             <div style={{fontSize:16}}>{result.duplicate ? "Votre présence avait déjà été enregistrée aujourd’hui." : result.status === "late" ? "Présentez-vous au secrétariat pour régler la pénalité avant l’accès au cours." : "Votre présence est confirmée. Bonne formation !"}</div>
             <p style={{ margin: "6px 0" }}>Statut : {result.status === "late" ? "En retard" : "À l’heure"}</p>
