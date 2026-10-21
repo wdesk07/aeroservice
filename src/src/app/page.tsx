@@ -24,6 +24,15 @@ function readOfflineSnapshot<T>(userId: string, key: string): T | null {
   } catch { return null; }
 }
 
+
+
+type OfflineQueuedOperation = { id: string; userId: string; table: string; payload: Record<string, unknown>; createdAt: string; validateAfterSync?: boolean; status: "pending" | "error"; error?: string };
+const OFFLINE_QUEUE_KEY = "aero_service_offline_operations_v1";
+const OFFLINE_ACCESS_KEY = "aero_service_offline_access_overrides_v1";
+function readOfflineQueue(): OfflineQueuedOperation[] { try { const value = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]"); return Array.isArray(value) ? value : []; } catch { return []; } }
+function writeOfflineQueue(value: OfflineQueuedOperation[]) { try { localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(value)); } catch { throw new Error("Stockage local indisponible ou plein. Libérez de l’espace avant de continuer."); } }
+function saveOfflineAccessOverride(penaltyId: string, personId: string, userId: string) { try { const value = JSON.parse(localStorage.getItem(OFFLINE_ACCESS_KEY) || "[]"); const entries = Array.isArray(value) ? value : []; const next = entries.filter((x: any) => x.penaltyId !== penaltyId); next.push({ penaltyId, personId, authorized: true, provisional: true, createdAt: new Date().toISOString(), recordedBy: userId }); localStorage.setItem(OFFLINE_ACCESS_KEY, JSON.stringify(next)); } catch { throw new Error("Le règlement provisoire n’a pas pu être conservé localement. Ne confirmez pas l’accès."); } }
+
 type Profile = { id: string; public_id?: string | null; first_name?: string | null; last_name?: string | null; display_name?: string | null; email?: string | null; status?: string };
 type AccountFormation = { id: string; code?: string | null; name?: string | null; status?: string | null };
 type Role = { code: string; name: string };
@@ -800,7 +809,7 @@ export default function Home() {
   }
   async function createModuleRecord(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
+    const offlineMode = typeof navigator !== "undefined" && !navigator.onLine;
     const canRecordPayment = roles.some(role => ["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
     const canCreatePenalty = roles.some(role => ["SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE","DIRECTOR","PRE_ADMIN","ADMIN"].includes(role.code.toUpperCase()));
     const canCreateActiveRecord = active === "payments" ? canRecordPayment : active === "penalties" ? canCreatePenalty : (isAdmin || (isSecretary && active === "registrations"));
@@ -854,6 +863,34 @@ export default function Home() {
       payload.status = "pending";
       payload.receipt_number = null;
     }
+    if (offlineMode) {
+      if (!user) { setError("Reconnectez-vous avant d’enregistrer une opération hors connexion."); setBusy(false); return; }
+      if (!["registrations", "penalties", "payments"].includes(active)) {
+        setError("Cette opération n’est pas disponible hors connexion. Les inscriptions, pénalités et règlements sont les seuls dossiers mis en attente pour le moment."); setBusy(false); return;
+      }
+      try {
+        const queue = readOfflineQueue();
+        const queuedPayload = { ...payload, id: String(payload.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2)) };
+        const isPenaltyPayment = active === "payments" && String(payload.payment_type) === "penalty";
+        if (isPenaltyPayment) {
+          const penaltyId = String(payload.penalty_id || "");
+          if (!penaltyId) throw new Error("Aucune pénalité existante n’est liée à ce règlement. Connectez-vous pour créer le dossier de pénalité.");
+          saveOfflineAccessOverride(penaltyId, String(payload.person_id || ""), user.id);
+        }
+        queue.push({ id: String(queuedPayload.id), userId: user.id, table: active, payload: queuedPayload, createdAt: new Date().toISOString(), validateAfterSync: isPenaltyPayment, status: "pending" });
+        writeOfflineQueue(queue);
+        setNotice(active === "payments" && isPenaltyPayment
+          ? "CONFIRMATION PROVISOIRE — règlement enregistré sur cet ordinateur. L’accès au cours est autorisé provisoirement. Le reçu officiel sera disponible après synchronisation avec le serveur."
+          : active === "payments"
+            ? "Paiement conservé localement en attente de synchronisation. Il n’est pas encore confirmé sur le serveur."
+            : "Dossier conservé sur cet ordinateur — EN ATTENTE DE SYNCHRONISATION. Il sera transmis au serveur dès le retour d’Internet.");
+        setCreateValues({}); setShowCreate(false);
+        await loadRows(active);
+      } catch (queueError) {
+        setError(queueError instanceof Error ? queueError.message : "Impossible de conserver cette opération localement.");
+      }
+      setBusy(false); return;
+    }
     const { error: insertError } = await supabase.from(active).insert(payload);
     if (insertError) setError(insertError.message);
     else {
@@ -865,7 +902,13 @@ export default function Home() {
   }
 
   async function openAttendancePenalty(row: Record<string, unknown>) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const allowedOffline = roles.some(role => ["DIRECTOR", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"].includes(role.code.toUpperCase()));
+      const penaltyId = String(row.penalty_id || "");
+      if (!user || !allowedOffline || !penaltyId) { setError("Hors connexion : impossible de créer une pénalité sans dossier déjà enregistré. Le pointage reste bloqué jusqu’à ce que le dossier soit disponible."); return; }
+      setActive("payments"); setShowCreate(true); setCreateValues({ payment_type: "penalty", penalty_id: penaltyId, payment_category: "penalty", person_id: String(row.person_id || ""), amount_fcfa: "", payment_description: "Règlement provisoire de pénalité hors connexion" });
+      setNotice("Mode hors connexion : enregistrez le règlement dans le formulaire. Une confirmation provisoire sera affichée et le serveur sera mis à jour au retour d’Internet."); return;
+    }
     const allowed = roles.some(role => ["DIRECTOR", "PRE_ADMIN", "SECRETARIAT", "SECRETARY", "SECRETAIRE", "SECRÉTAIRE"].includes(role.code.toUpperCase()));
     if (!user || !allowed) { setError("Votre rôle ne permet pas de gérer la régularisation des retards."); return; }
     if (String(row.status ?? "").toLowerCase() !== "late") { setError("Cette ligne n’est pas un retard à régulariser."); return; }
