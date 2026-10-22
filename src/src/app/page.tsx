@@ -666,8 +666,8 @@ export default function Home() {
   async function createPenaltyRule(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (typeof navigator !== "undefined" && !navigator.onLine) { setError("Mode hors connexion : cette opération n’est pas enregistrée. Reconnectez-vous pour la valider."); setNotice(""); return; }
-    const allowed = roles.some(role => ["DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()));
-    if (!allowed || !user) { setError("Seule la Direction ou le pré-administrateur peut créer ou modifier une règle générale."); return; }
+    const allowed = roles.some(role => ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARY","SECRETARIAT","SECRETAIRE","SECRÉTAIRE"].includes(role.code.toUpperCase()));
+    if (!allowed || !user) { setError("Seule la Direction, le pré-administrateur ou le secrétariat autorisé peut créer ou modifier une règle générale."); return; }
     if (ruleForm.application_mode === "automatic" && ruleForm.penalty_type !== "late_arrival") { setError("Pour le moment, l’application automatique est disponible pour les retards enregistrés au pointage. Utilisez le mode manuel pour les autres motifs."); return; }
     const amount = Number(ruleForm.amount_fcfa), minDelay = Number(ruleForm.min_delay_minutes), tolerance = Number(ruleForm.tolerance_minutes);
     const maxDelay = ruleForm.max_delay_minutes.trim() === "" ? null : Number(ruleForm.max_delay_minutes);
