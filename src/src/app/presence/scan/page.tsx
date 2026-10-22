@@ -83,7 +83,10 @@ export default function LearnerQrScanPage() {
       streamRef.current = null;
       if (!found) throw new Error("QR code non détecté. Réessayez en rapprochant la caméra.");
       const scanned = new URL(found, window.location.origin);
-      if (!["/presence/qr", "/presence/qr/"].includes(scanned.pathname) || !(scanned.hostname === "aero-service.vercel.app" || scanned.hostname.endsWith(".vercel.app"))) {
+      const allowedPaths = isPersonnel
+        ? ["/presence/personnel-qr", "/presence/personnel-qr/", "/presence/borne", "/presence/borne/"]
+        : ["/presence/qr", "/presence/qr/"];
+      if (!allowedPaths.includes(scanned.pathname) || !(scanned.hostname === "aero-service.vercel.app" || scanned.hostname.endsWith(".vercel.app"))) {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
@@ -104,10 +107,16 @@ export default function LearnerQrScanPage() {
       if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
       setState("done");
       setMessage(data.duplicate
-        ? "Un pointage existe déjà pour cette journée."
+        ? (isPersonnel
+            ? "Un pointage du personnel existe déjà aujourd’hui. Consultez le secrétariat en cas d’erreur."
+            : "Une demande de pointage existe déjà pour cette séance. Consultez votre espace apprenant pour son état.")
         : isPersonnel
-          ? "Pointage du personnel enregistré par le serveur après contrôle du rôle, des horaires et du GPS."
-          : "Demande transmise au serveur. Le pointage apprenant reste soumis aux règles de la séance et à la validation prévue.");
+          ? (data.status === "late"
+              ? "POINTAGE EN RETARD. Votre arrivée a été enregistrée par le serveur. Consultez le secrétariat pour connaître la régularisation applicable."
+              : "POINTAGE ENREGISTRÉ — PRÉSENCE CONFIRMÉE par le serveur. La vérification du rôle, des horaires et du GPS a réussi.")
+          : (data.status === "late" || Number(data.delay_minutes) > 0
+              ? "VOUS ÊTES EN RETARD de " + Number(data.delay_minutes || 0) + " minute(s). Présentez-vous au secrétariat pour régulariser votre situation avant l’accès au cours."
+              : "DEMANDE ENREGISTRÉE PAR LE SERVEUR. Votre présence et votre éventuel retard doivent encore être confirmés selon les règles de la séance. Consultez votre espace apprenant pour le statut confirmé."));
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");
