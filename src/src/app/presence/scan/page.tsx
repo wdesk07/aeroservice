@@ -116,7 +116,7 @@ export default function LearnerQrScanPage() {
               : "POINTAGE ENREGISTRÉ — PRÉSENCE CONFIRMÉE par le serveur. La vérification du rôle, des horaires et du GPS a réussi.")
           : (data.status === "late" || Number(data.delay_minutes) > 0
               ? "VOUS ÊTES EN RETARD de " + Number(data.delay_minutes || 0) + " minute(s). Présentez-vous au secrétariat pour régulariser votre situation avant l’accès au cours."
-              : "DEMANDE ENREGISTRÉE PAR LE SERVEUR. Votre présence et votre éventuel retard doivent encore être confirmés selon les règles de la séance. Consultez votre espace apprenant pour le statut confirmé."));
+              : ["present", "on_time", "confirmed", "validated"].includes(String(data.status || "").toLowerCase()) ? "PRÉSENCE CONFIRMÉE — Vous êtes présent à l’heure. Bonne formation !" : "POINTAGE ENREGISTRÉ — Le serveur a reçu votre demande. Votre statut définitif dépend des règles de la séance ; consultez votre espace apprenant pour sa confirmation."));
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");
