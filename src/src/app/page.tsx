@@ -484,9 +484,11 @@ export default function Home() {
           {!isLearner && <div className="panel"><div className="panel-head"><div><div className="panel-title">{isAdmin ? "Les quatre suivis de la Direction" : "Accès rapide"}</div><div className="panel-desc">{isAdmin ? "Une vue simple pour suivre l’école sans multiplier les menus." : "Retrouvez les espaces de travail les plus utilisés."}</div></div></div><div className="panel-body"><div className="quick-grid">{(isAdmin ? [
             {key:"students",icon:"♙",title:"Apprenants",desc:"Par formation : retards, absences et régularisations"},
             {key:"staff",icon:"♧",title:"Personnel",desc:"Présences, retards et demandes de permission"},
-            {key:"payments",icon:"₣",title:"Point financier",desc:"Pénalités, paiements et montants restant dus"},
-            {key:"agenda",icon:"▦",title:"Agenda",desc:"Programmes, échéances et rappels"}
+            {key:"payments",icon:"₣",title:"Point financier",desc:"Paiements et suivi financier"},
+            {key:"agenda",icon:"▦",title:"Agenda",desc:"Programmes, échéances et rappels"},
+            {key:"penalties",icon:"⚠",title:"Pénalités",desc:"Barème, pénalités automatiques et règlements"}
           ] : [
+            ...(isSecretary ? [{key:"penalties",icon:"⚠",title:"Pénalités",desc:"Consulter les pénalités et suivre les règlements"}] : []),
             {key:"students",icon:"♙",title:"Gérer les apprenants",desc:"Consulter les dossiers et parcours"},
             {key:"formations",icon:"✈",title:"Catalogue des formations",desc:"Organiser l’offre pédagogique"},
             {key:"registrations",icon:"▣",title:"Suivre les inscriptions",desc:"Voir les demandes enregistrées"},
