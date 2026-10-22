@@ -18,6 +18,7 @@ export default function LearnerQrScanPage() {
   const [state, setState] = useState<"checking" | "ready" | "scanning" | "sending" | "done" | "error">("checking");
   const [message, setMessage] = useState("Vérification de votre connexion…");
   const [busy, setBusy] = useState(false);
+  const [isPersonnel, setIsPersonnel] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,8 +40,13 @@ export default function LearnerQrScanPage() {
           setMessage("Ce compte n’a aucun rôle actif autorisé pour le pointage. Contactez le secrétariat.");
           return;
         }
+        const personnelRoles = ["DIRECTOR","ADMIN","PRE_ADMIN","SECRETARIAT","SECRETARY","SECRETAIRE","SECRÉTAIRE","STAFF","PERSONNEL","TEACHER","ENSEIGNANT","PEDAGOGY","PEDAGOGIE","ACCOUNTING","FINANCE"];
+        const personnel = roles.some(role => personnelRoles.includes(role));
+        setIsPersonnel(personnel);
         setState("ready");
-        setMessage("Compte connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle et votre séance.");
+        setMessage(personnel
+          ? "Compte du personnel reconnu. Scannez le QR officiel au centre ; le serveur vérifiera vos droits, les horaires et votre position GPS."
+          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle, votre séance et votre position GPS.");
       }
     }
     void checkSession();
@@ -89,7 +95,7 @@ export default function LearnerQrScanPage() {
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
       });
-      const { data, error } = await supabase.rpc("request_qr_checkin_with_gps", {
+      const { data, error } = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_with_gps" : "request_qr_checkin_with_gps", {
         p_latitude: position.coords.latitude,
         p_longitude: position.coords.longitude,
         p_accuracy_m: Math.round(position.coords.accuracy)
@@ -98,8 +104,10 @@ export default function LearnerQrScanPage() {
       if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
       setState("done");
       setMessage(data.duplicate
-        ? "Une demande ou un pointage existe déjà pour cette séance."
-        : "Demande transmise au serveur. Le pointage ne devient officiel qu’après validation serveur et application des règles de votre compte.");
+        ? "Un pointage existe déjà pour cette journée."
+        : isPersonnel
+          ? "Pointage du personnel enregistré par le serveur après contrôle du rôle, des horaires et du GPS."
+          : "Demande transmise au serveur. Le pointage apprenant reste soumis aux règles de la séance et à la validation prévue.");
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");
