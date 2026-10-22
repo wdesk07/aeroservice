@@ -34,13 +34,13 @@ export default function LearnerQrScanPage() {
           const role = Array.isArray(row.roles) ? row.roles[0] : row.roles;
           return role?.code ? [String(role.code).toUpperCase()] : [];
         });
-        if (roleError || !roles.some(code => ["STUDENT", "APPRENANT"].includes(code))) {
+        if (roleError || roles.length === 0) {
           setState("error");
-          setMessage("Cette fonction est réservée aux comptes apprenants actifs.");
+          setMessage("Ce compte n’a aucun rôle actif autorisé pour le pointage. Contactez le secrétariat.");
           return;
         }
         setState("ready");
-        setMessage("Compte apprenant connecté. Scannez le QR officiel affiché au centre.");
+        setMessage("Compte connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle et votre séance.");
       }
     }
     void checkSession();
@@ -77,7 +77,7 @@ export default function LearnerQrScanPage() {
       streamRef.current = null;
       if (!found) throw new Error("QR code non détecté. Réessayez en rapprochant la caméra.");
       const scanned = new URL(found, window.location.origin);
-      if (scanned.origin !== window.location.origin || !["/presence/qr", "/presence/qr/"].includes(scanned.pathname)) {
+      if (!["/presence/qr", "/presence/qr/"].includes(scanned.pathname) || !(scanned.hostname === "aero-service.vercel.app" || scanned.hostname.endsWith(".vercel.app"))) {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
@@ -99,7 +99,7 @@ export default function LearnerQrScanPage() {
       setState("done");
       setMessage(data.duplicate
         ? "Une demande ou un pointage existe déjà pour cette séance."
-        : "Demande de pointage transmise. Le secrétariat doit la confirmer avant qu’elle devienne une présence officielle.");
+        : "Demande transmise au serveur. Le pointage ne devient officiel qu’après validation serveur et application des règles de votre compte.");
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");
@@ -114,13 +114,13 @@ export default function LearnerQrScanPage() {
     <section style={{ maxWidth: 560, margin: "0 auto", background: "#fff", border: "1px solid #dce4ef", borderRadius: 18, padding: 24, boxShadow: "0 8px 30px rgba(24,48,80,.08)" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <img src="/aero-service-logo.svg" alt="Logo officiel Aéro Service" style={{ width: 58, height: 58, objectFit: "contain" }} />
-        <div><strong style={{ fontSize: 20 }}>AÉRO SERVICE</strong><div style={{ color: "#65758b", fontSize: 13 }}>Pointage apprenant par QR</div></div>
+        <div><strong style={{ fontSize: 20 }}>AÉRO SERVICE</strong><div style={{ color: "#65758b", fontSize: 13 }}>Pointage par QR · apprenants et personnel</div></div>
       </header>
       <h1 style={{ fontSize: 24, marginBottom: 8 }}>Scanner pour pointer</h1>
       <p style={{ color: "#53647a", lineHeight: 1.6 }}>{message}</p>
       <video ref={videoRef} playsInline muted style={{ display: state === "scanning" ? "block" : "none", width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 12, background: "#101828", margin: "16px 0" }} />
       {state === "ready" || state === "error" ? <button onClick={() => void startScan()} disabled={busy} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Ouvrir la caméra et scanner</button> : null}
-      {state === "done" ? <button onClick={() => { setState("ready"); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
+      {state === "done" ? <button onClick={() => { setState("ready"); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
       <p style={{ marginTop: 20 }}><Link href="/" style={{ color: "#1769d2", fontWeight: 700, textDecoration: "none" }}>← Retour à mon espace</Link></p>
     </section>
   </main>;
