@@ -463,6 +463,14 @@ export default function Home() {
       <button className="link-btn" onClick={()=>{setMode(mode==="login"?"reset":"login");setError("");setNotice("");}}>{mode==="login"?"Mot de passe oublié ?":"← Retour à la connexion"}</button>
       {mode === "login" && <button className="link-btn" onClick={()=>{setMode("signup");setError("");setNotice("");setPassword("");}}>Créer un compte apprenant</button>}
       {mode === "signup" && <button className="link-btn" onClick={()=>{setMode("login");setError("");setNotice("");setPassword("");}}>← Retour à la connexion</button>}
+      {mode === "login" && <details className="install-help" style={{marginTop:18,border:"1px solid #d9e5f4",borderRadius:12,padding:"12px 14px",background:"#f7faff",color:"#17324f"}}>
+        <summary style={{cursor:"pointer",fontWeight:750,color:"#1765bd"}}>＋ Installer Aéro Service sur mon téléphone</summary>
+        <div style={{fontSize:13,lineHeight:1.65,marginTop:12}}>
+          <p style={{margin:"0 0 10px"}}><strong>🍎 iPhone / iPad</strong><br/>1. Ouvrez ce lien dans <strong>Safari</strong> (pas dans WhatsApp ou un autre navigateur intégré).<br/>2. Touchez le bouton <strong>Partager</strong> ⬆️.<br/>3. Faites défiler puis choisissez <strong>Sur l’écran d’accueil</strong>.<br/>4. Touchez <strong>Ajouter</strong>. L’icône Aéro Service apparaîtra sur votre écran.</p>
+          <p style={{margin:"0 0 10px"}}><strong>🤖 Android</strong><br/>Ouvrez le site dans Chrome, touchez <strong>⋮</strong>, puis <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</p>
+          <p style={{margin:0}}><strong>💻 Ordinateur</strong><br/>Dans Chrome ou Edge, cherchez l’icône d’installation dans la barre d’adresse, ou ouvrez le menu du navigateur et choisissez <strong>Installer Aéro Service</strong> si cette option apparaît.</p>
+        </div>
+      </details>}
       <div className="login-foot">La connexion est sécurisée par Supabase Auth.<br/>L’accès aux données dépend de votre rôle et des règles de sécurité.</div>
     </div></section>
   </main>;
