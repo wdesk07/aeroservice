@@ -19,6 +19,7 @@ export default function LearnerQrScanPage() {
   const [message, setMessage] = useState("Vérification de votre connexion…");
   const [busy, setBusy] = useState(false);
   const [isPersonnel, setIsPersonnel] = useState(false);
+  const [resultStatus, setResultStatus] = useState<"on_time" | "late" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,17 +107,12 @@ export default function LearnerQrScanPage() {
       if (error) throw new Error(error.message);
       if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
       setState("done");
-      setMessage(data.duplicate
-        ? (isPersonnel
-            ? "Un pointage du personnel existe déjà aujourd’hui. Consultez le secrétariat en cas d’erreur."
-            : "Une demande de pointage existe déjà pour cette séance. Consultez votre espace apprenant pour son état.")
-        : isPersonnel
-          ? (data.status === "late"
-              ? "POINTAGE EN RETARD. Votre arrivée a été enregistrée par le serveur. Consultez le secrétariat pour connaître la régularisation applicable."
-              : "POINTAGE ENREGISTRÉ — PRÉSENCE CONFIRMÉE par le serveur. La vérification du rôle, des horaires et du GPS a réussi.")
-          : (data.status === "late" || Number(data.delay_minutes) > 0
-              ? "VOUS ÊTES EN RETARD de " + Number(data.delay_minutes || 0) + " minute(s). Présentez-vous au secrétariat pour régulariser votre situation avant l’accès au cours."
-              : ["present", "on_time", "confirmed", "validated"].includes(String(data.status || "").toLowerCase()) ? "PRÉSENCE CONFIRMÉE — Vous êtes présent à l’heure. Bonne formation !" : "POINTAGE ENREGISTRÉ — Le serveur a reçu votre demande. Votre statut définitif dépend des règles de la séance ; consultez votre espace apprenant pour sa confirmation."));
+      const status = String(data.status || "").toLowerCase();
+      const late = status === "late" || Boolean(data.access_blocked) || Number(data.delay_minutes || 0) > Number(data.tolerance_minutes ?? 15);
+      setResultStatus(late ? "late" : "on_time");
+      setMessage(late
+        ? "RETARD CONSTATÉ — Votre arrivée a été enregistrée à " + Number(data.delay_minutes || 0) + " minute(s) de retard. L’accès au cours est bloqué jusqu’à régularisation auprès du secrétariat."
+        : "PRÉSENCE CONFIRMÉE — Vous êtes arrivé à l’heure. Votre pointage est enregistré : vous pouvez accéder au cours.");
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");
@@ -134,10 +130,10 @@ export default function LearnerQrScanPage() {
         <div><strong style={{ fontSize: 20 }}>AÉRO SERVICE</strong><div style={{ color: "#65758b", fontSize: 13 }}>Pointage par QR · apprenants et personnel</div></div>
       </header>
       <h1 style={{ fontSize: 24, marginBottom: 8 }}>Scanner pour pointer</h1>
-      <p style={{ color: "#53647a", lineHeight: 1.6 }}>{message}</p>
+      <p role={state === "done" ? "status" : undefined} style={{ color: resultStatus === "on_time" ? "#166534" : resultStatus === "late" ? "#991b1b" : "#53647a", background: resultStatus === "on_time" ? "#dcfce7" : resultStatus === "late" ? "#fee2e2" : "transparent", border: resultStatus ? `1px solid ${resultStatus === "on_time" ? "#86efac" : "#fca5a5"}` : "1px solid transparent", borderRadius: 12, padding: resultStatus ? 16 : 0, fontWeight: resultStatus ? 700 : 400, lineHeight: 1.6 }}>{message}</p>
       <video ref={videoRef} playsInline muted style={{ display: state === "scanning" ? "block" : "none", width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 12, background: "#101828", margin: "16px 0" }} />
       {state === "ready" || state === "error" ? <button onClick={() => void startScan()} disabled={busy} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Ouvrir la caméra et scanner</button> : null}
-      {state === "done" ? <button onClick={() => { setState("ready"); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
+      {state === "done" ? <button onClick={() => { setState("ready"); setResultStatus(null); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
       <p style={{ marginTop: 20 }}><Link href="/" style={{ color: "#1769d2", fontWeight: 700, textDecoration: "none" }}>← Retour à mon espace</Link></p>
     </section>
   </main>;
