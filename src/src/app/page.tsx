@@ -1177,6 +1177,7 @@ export default function Home() {
         <button className={"nav-item"+(active==="penalties"?" active":"")} onClick={()=>{setActive("penalties");setSearch("");setShowCreate(false);setMobileNav(false);setNotice("");setError("");}}><span className="nav-icon">⚠</span>Pénalités</button>
         <a className="nav-item" href="/direction/agenda"><span className="nav-icon">▦</span>Agenda</a>
       </div> : ["PILOTAGE","PÉDAGOGIE","ORGANISATION","ADMINISTRATION","FINANCES","SYSTÈME"].map(section => visibleModules.some(m=>m.section===section) ? <div key={section}><div className="nav-label">{section}</div>{visibleModules.filter(m=>m.section===section).map(m=><button key={m.key} className={"nav-item"+(active===m.key?" active":"")} onClick={()=>{setActive(m.key);setSearch("");setShowCreate(false);setMobileNav(false);setNotice("");setError("");}}><span className="nav-icon">{m.icon}</span>{m.label}</button>)}</div> : null)}
+      <a className="nav-item" href="/presence/scan"><span className="nav-icon">▦</span>Scanner pour pointer</a>
       {!isLearner && !isAdmin && <><a className="nav-item" href="/presence/borne"><span className="nav-icon">◉</span>Borne apprenants</a>
       <a className="nav-item" href="/presence/personnel-qr"><span className="nav-icon">◉</span>Borne du personnel</a>
       <a className="nav-item" href="/presence/qr-affiche"><span className="nav-icon">▦</span>QR apprenants à imprimer</a>

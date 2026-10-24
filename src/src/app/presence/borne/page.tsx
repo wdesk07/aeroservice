@@ -470,15 +470,9 @@ export default function PresenceKioskPage() {
       }
     };
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => void submit(position),
-        () => void submit(),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-      );
-    } else {
-      await submit();
-    }
+    // Le GPS est facultatif : le pointage sur la borne QR enregistrée
+    // ne doit jamais demander la localisation ni bloquer si elle est refusée.
+    await submit();
   }
 
   const timestamp = result?.arrived_at
