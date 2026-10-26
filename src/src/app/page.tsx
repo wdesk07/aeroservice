@@ -645,10 +645,29 @@ export default function Home() {
     }
     if (user && ["students", "registrations", "attendance", "penalties", "payments"].includes(active)) {
       supabase.from("groups").select("id,name,code").order("name").then(({ data }) => setGroupOptions((data ?? []) as { id: string; name: string; code: string }[]));
-      supabase.from("profiles").select("id,display_name,first_name,last_name,public_id").order("last_name").limit(300).then(({ data }) => setProfileOptions((data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]));
-      supabase.from("staff").select("id").then(({ data }) => setStaffIds((data ?? []).map((item: { id: string }) => item.id)));
-      supabase.from("students").select("id").then(({ data }) => setStudentIds((data ?? []).map((item: { id: string }) => item.id)));
-      supabase.from("teachers").select("id").then(({ data }) => setTeacherIds((data ?? []).map((item: { id: string }) => item.id)));
+      // Use the permission-checked active-person directory; direct profile RLS and empty
+      // staff/teacher tables previously caused the manual-penalty selector to appear empty.
+      supabase.rpc("list_penalty_people_directory").then(({ data, error: directoryError }) => {
+        const people = (data ?? []) as {
+          id: string; display_name: string | null; first_name: string | null; last_name: string | null;
+          public_id?: string | null; person_category?: string | null;
+        }[];
+        if (directoryError) {
+          setProfileOptions([]);
+          setStudentIds([]);
+          setStaffIds([]);
+          setTeacherIds([]);
+          setError("Impossible de charger la liste des personnes : " + directoryError.message);
+          return;
+        }
+        setProfileOptions(people.map(person => ({
+          id: person.id, display_name: person.display_name, first_name: person.first_name,
+          last_name: person.last_name, public_id: person.public_id || null
+        })).sort((a, b) => (a.last_name || a.display_name || "").localeCompare(b.last_name || b.display_name || "", "fr")));
+        setStudentIds(people.filter(person => person.person_category === "students").map(person => person.id));
+        setStaffIds(people.filter(person => person.person_category === "staff").map(person => person.id));
+        setTeacherIds(people.filter(person => person.person_category === "teacher").map(person => person.id));
+      });
       if (active === "payments") {
         supabase.from("penalties").select("id,person_id,amount_fcfa,status,penalty_type,description").in("status", ["pending", "unpaid", "due", "open"]).gt("amount_fcfa", 0).order("created_at", { ascending: true }).then(({ data, error }) => {
           setPenaltyOptions(error ? [] : (data ?? []) as { id: string; person_id: string; amount_fcfa: number; status: string; penalty_type?: string | null; description?: string | null }[]);
