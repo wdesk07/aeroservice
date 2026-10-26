@@ -645,10 +645,24 @@ export default function Home() {
     }
     if (user && ["students", "registrations", "attendance", "penalties", "payments"].includes(active)) {
       supabase.from("groups").select("id,name,code").order("name").then(({ data }) => setGroupOptions((data ?? []) as { id: string; name: string; code: string }[]));
-      supabase.from("profiles").select("id,display_name,first_name,last_name,public_id").order("last_name").limit(300).then(({ data }) => setProfileOptions((data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }[]));
-      supabase.from("staff").select("id").then(({ data }) => setStaffIds((data ?? []).map((item: { id: string }) => item.id)));
-      supabase.from("students").select("id").then(({ data }) => setStudentIds((data ?? []).map((item: { id: string }) => item.id)));
-      supabase.from("teachers").select("id").then(({ data }) => setTeacherIds((data ?? []).map((item: { id: string }) => item.id)));
+      // Use the permission-checked directory RPCs instead of querying profiles/staff directly.
+      // In production, profile RLS can hide the directory and staff/teachers tables may be empty
+      // even when the corresponding accounts exist in user_roles.
+      Promise.all([
+        supabase.rpc("list_students_directory"),
+        supabase.rpc("list_staff_directory")
+      ]).then(([studentsResult, staffResult]) => {
+        const studentRows = (studentsResult.data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; student_number?: string | null; email?: string | null }[];
+        const staffRows = (staffResult.data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; staff_number?: string | null; email?: string | null; role_code?: string | null }[];
+        const options = new Map<string, { id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }>();
+        for (const person of studentRows) options.set(person.id, { id: person.id, display_name: person.display_name, first_name: person.first_name, last_name: person.last_name, public_id: person.student_number || person.email || null });
+        for (const person of staffRows) options.set(person.id, { id: person.id, display_name: person.display_name, first_name: person.first_name, last_name: person.last_name, public_id: person.staff_number || person.email || null });
+        setProfileOptions(Array.from(options.values()).sort((a, b) => (a.last_name || a.display_name || "").localeCompare(b.last_name || b.display_name || "", "fr")));
+        setStudentIds(studentRows.map(person => person.id));
+        setStaffIds(staffRows.filter(person => !["TEACHER", "ENSEIGNANT"].includes(String(person.role_code || "").toUpperCase())).map(person => person.id));
+        setTeacherIds(staffRows.filter(person => ["TEACHER", "ENSEIGNANT"].includes(String(person.role_code || "").toUpperCase())).map(person => person.id));
+        if (studentsResult.error && staffResult.error) setError("Impossible de charger la liste des personnes. Vérifiez les autorisations de l’annuaire.");
+      });
       if (active === "payments") {
         supabase.from("penalties").select("id,person_id,amount_fcfa,status,penalty_type,description").in("status", ["pending", "unpaid", "due", "open"]).gt("amount_fcfa", 0).order("created_at", { ascending: true }).then(({ data, error }) => {
           setPenaltyOptions(error ? [] : (data ?? []) as { id: string; person_id: string; amount_fcfa: number; status: string; penalty_type?: string | null; description?: string | null }[]);
