@@ -645,23 +645,31 @@ export default function Home() {
     }
     if (user && ["students", "registrations", "attendance", "penalties", "payments"].includes(active)) {
       supabase.from("groups").select("id,name,code").order("name").then(({ data }) => setGroupOptions((data ?? []) as { id: string; name: string; code: string }[]));
-      // Use the permission-checked directory RPCs instead of querying profiles/staff directly.
-      // In production, profile RLS can hide the directory and staff/teachers tables may be empty
-      // even when the corresponding accounts exist in user_roles.
-      Promise.all([
-        supabase.rpc("list_students_directory"),
-        supabase.rpc("list_staff_directory")
-      ]).then(([studentsResult, staffResult]) => {
-        const studentRows = (studentsResult.data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; student_number?: string | null; email?: string | null }[];
-        const staffRows = (staffResult.data ?? []) as { id: string; display_name: string | null; first_name: string | null; last_name: string | null; staff_number?: string | null; email?: string | null; role_code?: string | null }[];
+      // The dedicated, permission-checked directory includes all active account categories,
+      // including admin/secretariat accounts, so "Tout le monde" never shows an empty list
+      // merely because a profile is not present in students/staff tables.
+      supabase.rpc("list_penalty_people_directory").then(({ data, error: directoryError }) => {
+        const directoryRows = (data ?? []) as {
+          id: string; display_name: string | null; first_name: string | null; last_name: string | null;
+          public_id?: string | null; role_codes?: string[] | null; person_category?: string | null;
+        }[];
+        if (directoryError) {
+          setProfileOptions([]);
+          setStudentIds([]);
+          setStaffIds([]);
+          setTeacherIds([]);
+          setError("Impossible de charger la liste des personnes : " + directoryError.message);
+          return;
+        }
         const options = new Map<string, { id: string; display_name: string | null; first_name: string | null; last_name: string | null; public_id: string | null }>();
-        for (const person of studentRows) options.set(person.id, { id: person.id, display_name: person.display_name, first_name: person.first_name, last_name: person.last_name, public_id: person.student_number || person.email || null });
-        for (const person of staffRows) options.set(person.id, { id: person.id, display_name: person.display_name, first_name: person.first_name, last_name: person.last_name, public_id: person.staff_number || person.email || null });
+        for (const person of directoryRows) options.set(person.id, {
+          id: person.id, display_name: person.display_name, first_name: person.first_name,
+          last_name: person.last_name, public_id: person.public_id || null
+        });
         setProfileOptions(Array.from(options.values()).sort((a, b) => (a.last_name || a.display_name || "").localeCompare(b.last_name || b.display_name || "", "fr")));
-        setStudentIds(studentRows.map(person => person.id));
-        setStaffIds(staffRows.filter(person => !["TEACHER", "ENSEIGNANT"].includes(String(person.role_code || "").toUpperCase())).map(person => person.id));
-        setTeacherIds(staffRows.filter(person => ["TEACHER", "ENSEIGNANT"].includes(String(person.role_code || "").toUpperCase())).map(person => person.id));
-        if (studentsResult.error && staffResult.error) setError("Impossible de charger la liste des personnes. Vérifiez les autorisations de l’annuaire.");
+        setStudentIds(directoryRows.filter(person => person.person_category === "students").map(person => person.id));
+        setStaffIds(directoryRows.filter(person => person.person_category === "staff").map(person => person.id));
+        setTeacherIds(directoryRows.filter(person => person.person_category === "teacher").map(person => person.id));
       });
       if (active === "payments") {
         supabase.from("penalties").select("id,person_id,amount_fcfa,status,penalty_type,description").in("status", ["pending", "unpaid", "due", "open"]).gt("amount_fcfa", 0).order("created_at", { ascending: true }).then(({ data, error }) => {
