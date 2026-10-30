@@ -219,7 +219,7 @@ BEGIN
   WHERE cs.session_date BETWEEN v_suspension.starts_on AND v_suspension.ends_on
     AND (v_suspension.formation_id IS NULL OR cs.formation_id = v_suspension.formation_id)
     AND cs.status = 'cancelled'
-    AND cs.cancellation_reason = 'Suspension Direction: ' || v_suspension.reason
+    AND cs.cancellation_reason LIKE 'Suspension Direction:%'
     AND NOT EXISTS (
       SELECT 1 FROM public.course_suspensions other
       WHERE other.id <> v_suspension.id
