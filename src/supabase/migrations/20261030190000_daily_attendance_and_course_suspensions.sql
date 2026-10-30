@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS public.course_suspensions (
   reason text NOT NULL,
   created_by uuid NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz NULL,
+  revoked_by uuid NULL REFERENCES public.profiles(id) ON DELETE SET NULL,
   CONSTRAINT course_suspensions_dates_check CHECK (ends_on >= starts_on),
   CONSTRAINT course_suspensions_reason_check CHECK (length(trim(reason)) > 0)
 );
@@ -102,7 +104,7 @@ BEGIN
     )
     AND NOT EXISTS (
       SELECT 1 FROM public.course_suspensions s
-      WHERE p_date BETWEEN s.starts_on AND s.ends_on
+      WHERE s.revoked_at IS NULL AND p_date BETWEEN s.starts_on AND s.ends_on
         AND (s.formation_id IS NULL OR s.formation_id = st.formation_id)
     );
   GET DIAGNOSTICS n = ROW_COUNT;
@@ -141,7 +143,7 @@ SELECT
                 )
                 AND NOT EXISTS (
                   SELECT 1 FROM public.course_suspensions s2
-                  WHERE cs2.session_date BETWEEN s2.starts_on AND s2.ends_on
+                  WHERE s2.revoked_at IS NULL AND cs2.session_date BETWEEN s2.starts_on AND s2.ends_on
                     AND (s2.formation_id IS NULL OR s2.formation_id = cs2.formation_id)
                 )
             )::time
@@ -180,10 +182,53 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (
   SELECT s.id
   FROM public.course_suspensions s
-  WHERE cs.session_date BETWEEN s.starts_on AND s.ends_on
+  WHERE s.revoked_at IS NULL AND cs.session_date BETWEEN s.starts_on AND s.ends_on
     AND (s.formation_id IS NULL OR s.formation_id = cs.formation_id)
   ORDER BY s.created_at DESC
   LIMIT 1
 ) suspension ON true
 WHERE cs.status <> 'cancelled' OR suspension.id IS NOT NULL;
 
+
+CREATE OR REPLACE FUNCTION public.revoke_course_suspension(p_suspension_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_suspension public.course_suspensions%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.kiosk_actor_has_role(ARRAY['DIRECTOR','ADMIN','PRE_ADMIN']) THEN
+    RAISE EXCEPTION 'COURSE_SUSPENSION_FORBIDDEN';
+  END IF;
+  SELECT * INTO v_suspension
+  FROM public.course_suspensions
+  WHERE id = p_suspension_id AND revoked_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'ACTIVE_SUSPENSION_NOT_FOUND'; END IF;
+
+  UPDATE public.course_suspensions
+  SET revoked_at = now(), revoked_by = auth.uid()
+  WHERE id = p_suspension_id;
+
+  UPDATE public.course_sessions cs
+  SET status = 'scheduled',
+      cancellation_reason = NULL,
+      updated_at = now()
+  WHERE cs.session_date BETWEEN v_suspension.starts_on AND v_suspension.ends_on
+    AND (v_suspension.formation_id IS NULL OR cs.formation_id = v_suspension.formation_id)
+    AND cs.status = 'cancelled'
+    AND cs.cancellation_reason = 'Suspension Direction: ' || v_suspension.reason
+    AND NOT EXISTS (
+      SELECT 1 FROM public.course_suspensions other
+      WHERE other.id <> v_suspension.id
+        AND other.revoked_at IS NULL
+        AND cs.session_date BETWEEN other.starts_on AND other.ends_on
+        AND (other.formation_id IS NULL OR other.formation_id = cs.formation_id)
+    );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.revoke_course_suspension(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.revoke_course_suspension(uuid) TO authenticated;
