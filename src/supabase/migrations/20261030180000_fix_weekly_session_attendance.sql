@@ -2,7 +2,7 @@
 -- A daily check-in must be evaluated against each session's own start/end time.
 CREATE OR REPLACE VIEW public.director_session_attendance AS
 SELECT
-  COALESCE(a.id, md5((cs.id::text || ':'::text) || st.id::text)::uuid) AS id,
+  md5((cs.id::text || ':'::text) || st.id::text)::uuid AS id,
   st.id AS person_id,
   p.display_name,
   p.first_name,
