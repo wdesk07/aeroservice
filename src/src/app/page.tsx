@@ -600,10 +600,17 @@ export default function Home() {
         };
         reader.readAsDataURL(file);
       });
-      if (dataUrl.length > 700000) throw new Error("La photo est trop volumineuse après compression. Choisissez une image plus légère.");
-      const { error: avatarError } = await supabase.auth.updateUser({ data: { avatar_url: dataUrl } });
+      const imageBlob = await (await fetch(dataUrl)).blob();
+      const objectPath = `${user.id}/avatar.jpg`;
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(objectPath, imageBlob, {
+        upsert: true, contentType: "image/jpeg", cacheControl: "3600"
+      });
+      if (uploadError) throw uploadError;
+      const { data: publicImage } = supabase.storage.from("avatars").getPublicUrl(objectPath);
+      const publicUrl = `${publicImage.publicUrl}?v=${Date.now()}`;
+      const { error: avatarError } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
       if (avatarError) throw avatarError;
-      setSettingsAvatar(dataUrl);
+      setSettingsAvatar(publicUrl);
       setNotice("Photo de profil mise à jour.");
     } catch (err) {
       setError("La photo n’a pas pu être enregistrée : " + (err instanceof Error ? err.message : String(err)));
