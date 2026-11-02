@@ -87,6 +87,12 @@ const canAccessModule = (key: ModuleKey, roleCodes: string[]) => {
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsEmail, setSettingsEmail] = useState("");
+  const [settingsCurrentPassword, setSettingsCurrentPassword] = useState("");
+  const [settingsNewPassword, setSettingsNewPassword] = useState("");
+  const [settingsPasswordConfirmation, setSettingsPasswordConfirmation] = useState("");
+  const [settingsAvatar, setSettingsAvatar] = useState<string | null>(null);
   const [accountFormation, setAccountFormation] = useState<AccountFormation | null>(null);
   const [studentNumber, setStudentNumber] = useState<string | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -516,6 +522,95 @@ export default function Home() {
     if (resetError) setError(resetError.message); else setNotice("Si cette adresse est enregistrée, un lien de réinitialisation sera envoyé.");
     setBusy(false);
   }
+  useEffect(() => {
+    if (!user) return;
+    setSettingsName(profile?.display_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "");
+    setSettingsEmail(user.email || "");
+    setSettingsAvatar(typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : null);
+  }, [user?.id, user?.email, profile?.display_name, profile?.first_name, profile?.last_name]);
+
+  async function saveAccountProfile(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); if (!user) return;
+    setBusy(true); setError(""); setNotice("");
+    const cleanName = settingsName.trim();
+    if (cleanName.length < 2) { setError("Le nom affiché doit contenir au moins 2 caractères."); setBusy(false); return; }
+    const parts = cleanName.split(/\s+/);
+    const { error: profileError } = await supabase.from("profiles").update({
+      display_name: cleanName,
+      first_name: parts.slice(0, -1).join(" ") || cleanName,
+      last_name: parts.length > 1 ? parts[parts.length - 1] : ""
+    }).eq("id", user.id);
+    if (profileError) { setError("Le profil n’a pas pu être mis à jour : " + profileError.message); setBusy(false); return; }
+    const { error: metadataError } = await supabase.auth.updateUser({ data: { display_name: cleanName, full_name: cleanName } });
+    if (metadataError) { setError("Le nom a été enregistré dans le profil, mais pas dans les métadonnées du compte : " + metadataError.message); setBusy(false); return; }
+    await loadIdentity(user);
+    setNotice("Votre nom affiché a été mis à jour.");
+    setBusy(false);
+  }
+
+  async function requestEmailChange(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); if (!user) return;
+    setBusy(true); setError(""); setNotice("");
+    const nextEmail = settingsEmail.trim().toLowerCase();
+    if (!nextEmail || nextEmail === (user.email || "").toLowerCase()) { setError("Saisissez une nouvelle adresse e-mail différente de l’actuelle."); setBusy(false); return; }
+    const { error: emailError } = await supabase.auth.updateUser({ email: nextEmail });
+    if (emailError) setError("La demande de changement d’e-mail a échoué : " + emailError.message);
+    else setNotice("Demande envoyée. Ouvrez le message de confirmation envoyé à la nouvelle adresse e-mail pour terminer le changement. L’adresse actuelle reste active jusque-là.");
+    setBusy(false);
+  }
+
+  async function saveAccountPassword(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); if (!user?.email) return;
+    setBusy(true); setError(""); setNotice("");
+    if (!settingsCurrentPassword) { setError("Saisissez votre mot de passe actuel."); setBusy(false); return; }
+    if (settingsNewPassword.length < 8) { setError("Le nouveau mot de passe doit contenir au moins 8 caractères."); setBusy(false); return; }
+    if (settingsNewPassword !== settingsPasswordConfirmation) { setError("Les deux nouveaux mots de passe ne correspondent pas."); setBusy(false); return; }
+    const { error: verifyError } = await supabase.auth.signInWithPassword({ email: user.email, password: settingsCurrentPassword });
+    if (verifyError) { setError("Le mot de passe actuel est incorrect."); setBusy(false); return; }
+    const { error: passwordError } = await supabase.auth.updateUser({ password: settingsNewPassword });
+    if (passwordError) setError("Le mot de passe n’a pas pu être modifié : " + passwordError.message);
+    else { setSettingsCurrentPassword(""); setSettingsNewPassword(""); setSettingsPasswordConfirmation(""); setNotice("Mot de passe modifié avec succès."); }
+    setBusy(false);
+  }
+
+  async function saveAccountAvatar(file?: File) {
+    if (!user || !file) return;
+    setError(""); setNotice("");
+    if (!file.type.startsWith("image/")) { setError("Choisissez un fichier image."); return; }
+    if (file.size > 8 * 1024 * 1024) { setError("La photo doit peser moins de 8 Mo."); return; }
+    setBusy(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Lecture de la photo impossible."));
+        reader.onload = () => {
+          const image = new Image();
+          image.onerror = () => reject(new Error("Cette image ne peut pas être ouverte."));
+          image.onload = () => {
+            const canvas = document.createElement("canvas");
+            const scale = Math.min(1, 360 / Math.max(image.width, image.height));
+            canvas.width = Math.max(1, Math.round(image.width * scale));
+            canvas.height = Math.max(1, Math.round(image.height * scale));
+            const context = canvas.getContext("2d");
+            if (!context) { reject(new Error("Traitement de l’image indisponible.")); return; }
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL("image/jpeg", 0.78));
+          };
+          image.src = String(reader.result);
+        };
+        reader.readAsDataURL(file);
+      });
+      if (dataUrl.length > 700000) throw new Error("La photo est trop volumineuse après compression. Choisissez une image plus légère.");
+      const { error: avatarError } = await supabase.auth.updateUser({ data: { avatar_url: dataUrl } });
+      if (avatarError) throw avatarError;
+      setSettingsAvatar(dataUrl);
+      setNotice("Photo de profil mise à jour.");
+    } catch (err) {
+      setError("La photo n’a pas pu être enregistrée : " + (err instanceof Error ? err.message : String(err)));
+    }
+    setBusy(false);
+  }
+
   async function handleUpdatePassword(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true); setError(""); setNotice("");
     if (password.length < 8) { setError("Le nouveau mot de passe doit contenir au moins 8 caractères."); setBusy(false); return; }
@@ -1125,6 +1220,7 @@ export default function Home() {
 
   const activeModule = modules.find(m => m.key === active) ?? modules[0];
   const fullName = profile?.display_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || user?.email || "Utilisateur";
+  const avatarUrl = settingsAvatar || (typeof user?.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : "");
   const filteredRows = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return rows;
@@ -1254,7 +1350,15 @@ export default function Home() {
             {loading?<div className="loading">Chargement des données…</div>:filteredRows.length===0?<div className="empty-state"><div className="empty-icon">⌕</div><strong>{rows.length===0?"Aucune donnée à afficher":"Aucun résultat"}</strong><div style={{marginTop:7}}>{rows.length===0?"Ce module est vide ou les règles d’accès empêchent la lecture.":"Essayez avec un autre terme de recherche."}</div></div>:<div className="table-wrap"><table><thead><tr>{Object.keys(filteredRows[0]).filter(k=>k!=="id").map(k=><th key={k}>{k==="person_id"?"Compte lié":k==="payer_name"?"Payeur":k==="payment_category"?"Nature de recette":pretty(k)}</th>)}{active==="registrations"&&isSecretary&&<th>Actions</th>}{active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()))&&<th>Actions</th>}{active==="justifications"&&(isSecretary||isAdmin)&&<th>Actions</th>}{active==="attendance"&&isSecretary&&<th>Régularisation</th>}</tr></thead><tbody>{filteredRows.map((row,i)=><tr className={["late","regularized","regularized_late"].includes(String(row.status??"").toLowerCase()) ? "late-row" : undefined} key={String(row.id??row.code??i)}>{Object.entries(row).filter(([k])=>k!=="id").map(([k,v])=><td key={k}>{["person_id","student_id","learner_id","staff_id","teacher_id"].includes(k)&&v!=null? (profileOptions.find(p=>p.id===String(v))?.display_name || [profileOptions.find(p=>p.id===String(v))?.first_name,profileOptions.find(p=>p.id===String(v))?.last_name].filter(Boolean).join(" ") || profileOptions.find(p=>p.id===String(v))?.public_id || "Nom et prénom à compléter"):k==="payment_category"?({"school_contribution":"Contribution scolaire","tuition":"Scolarité","registration_fee":"Frais d’inscription","training_fee":"Frais de formation","exam_fee":"Frais d’examen","document_sale":"Vente de documents","membership_fee":"Cotisation / adhésion","service_fee":"Prestation de service","equipment_fee":"Frais d’équipement","transport_fee":"Transport","penalty":"Pénalité","other":"Autre recette"} as Record<string,string>)[String(v)]||String(v):k==="status"&&v!=null?<span className={"pill "+statusClass(String(v))}>{pretty(String(v))}</span>:v==null?"—":typeof v==="boolean"?(v?"Oui":"Non"):typeof v==="object"?JSON.stringify(v):String(v).length>48?String(v).slice(0,45)+"…":String(v)}</td>)}{active==="registrations"&&isSecretary&&<td>{String(row.status)==="pending"?<><button className="btn btn-primary" disabled={busy} onClick={()=>void reviewRegistration(row,"approved")}>Valider</button> <button className="btn" disabled={busy} onClick={()=>void reviewRegistration(row,"rejected")}>Rejeter</button></>:String(row.status)==="approved"?<button className="btn btn-primary" disabled={busy||sendingWelcomeFor===String(row.person_id)} onClick={()=>void sendWelcomeEmail(row)}>{sendingWelcomeFor===String(row.person_id)?"Envoi…":"Envoyer le lien de connexion"}</button>:<span className="stat-foot">Aucune action</span>}</td>}{active==="justifications"&&(isSecretary||isAdmin)&&String(row.status)==="pending"&&<td><button className="btn btn-primary" disabled={busy} onClick={()=>void reviewAbsenceJustification(row,"approved")}>Approuver</button> <button className="btn" disabled={busy} onClick={()=>void reviewAbsenceJustification(row,"rejected")}>Rejeter</button></td>}{active==="payments"&&roles.some(role=>["ACCOUNTING","SECRETARIAT","DIRECTOR","PRE_ADMIN"].includes(role.code.toUpperCase()))&&<td>{String(row.status??"").toLowerCase() === "pending"?<button className="btn btn-primary" disabled={busy} onClick={()=>void validatePayment(row)}>Valider et générer le reçu</button>:row.receipt_number?<button className="btn" onClick={()=>{setReceiptPayment(row);printReceipt(row)}}>Voir / imprimer reçu</button>:<span className="stat-foot">Aucune action</span>}</td>}{active==="attendance"&&(isSecretary||isAdmin)&&<td>{String(row.status??"").toLowerCase()==="late"?<button className="btn btn-primary" disabled={busy} onClick={()=>{setActive("penalties");setSearch("");setCreateValues({person_id:String(row.person_id??""),penalty_type:"late_arrival",description:"Retard constaté — "+String(row.delay_minutes??0)+" minute(s)",amount_fcfa:"1000",status:"pending"});setShowCreate(true);setNotice("");setError("");}}>{row.penalty_id?"Ouvrir la pénalité":"Créer la pénalité"}</button>:<span className="stat-foot">Aucune action</span>}</td>}</tr>)}</tbody></table></div>}
           </div>
         </>}
-        {active==="settings"&&<><div className="page-heading"><div><div className="eyebrow">SYSTÈME</div><h1 className="page-title">Paramètres du compte</h1><p className="page-subtitle">Consultez les informations de votre session et la configuration de sécurité.</p></div></div><div className="panel"><div className="panel-head"><div className="panel-title">Profil connecté</div></div><div className="panel-body" style={{display:"grid",gap:18}}><div><div className="stat-foot">Nom affiché</div><div style={{fontWeight:700,marginTop:5}}>{fullName}</div></div><div><div className="stat-foot">E-mail</div><div style={{fontWeight:700,marginTop:5}}>{user.email}</div></div><div><div className="stat-foot">Rôles</div><div style={{marginTop:5}}>{roles.map(r=><span className="pill" key={r.code} style={{marginRight:6}}>{r.name}</span>)}</div></div><div><div className="stat-foot">Statut</div><div style={{marginTop:5}}><span className={"pill "+statusClass(profile?.status||"")}>{profile?.status||"Non renseigné"}</span></div></div><button className="btn" style={{justifySelf:"start"}} onClick={handleSignOut}>Se déconnecter de cette session</button></div></div><div className="panel"><div className="panel-head"><div className="panel-title">Sécurité et données</div></div><div className="panel-body" style={{fontSize:12,color:"#758396",lineHeight:1.8}}>La connexion est gérée par Supabase Auth. Les données sont chargées via les politiques de sécurité (RLS) configurées sur la base. Aucun secret de serveur n’est embarqué dans cette interface.</div></div></>}
+        {active==="settings"&&<><div className="page-heading"><div><div className="eyebrow">MON COMPTE</div><h1 className="page-title">Paramètres du compte</h1><p className="page-subtitle">Gérez votre photo, vos informations personnelles et la sécurité de votre accès.</p></div></div>
+          <div className="panel"><div className="panel-head"><div><div className="panel-title">Photo et nom du profil</div><div className="panel-desc">Ces informations personnalisent votre espace sans modifier votre rôle ni vos droits.</div></div></div><div className="panel-body" style={{display:"grid",gap:18}}>
+            <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><div className="avatar" style={{width:76,height:76,borderRadius:"50%",overflow:"hidden",display:"grid",placeItems:"center",fontSize:22}}>{avatarUrl?<img src={avatarUrl} alt="Photo de profil" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:initials(fullName)}</div><label className="btn" style={{cursor:"pointer"}}>Choisir une photo<input type="file" accept="image/*" style={{display:"none"}} disabled={busy} onChange={e=>{void saveAccountAvatar(e.target.files?.[0]);e.currentTarget.value="";}}/></label><span className="stat-foot">Image JPG, PNG ou WebP · 8 Mo maximum · recadrage automatique</span></div>
+            <form onSubmit={saveAccountProfile} style={{display:"grid",gap:12,maxWidth:560}}><label className="field">Nom affiché<input required minLength={2} maxLength={100} value={settingsName} onChange={e=>setSettingsName(e.target.value)} placeholder="Votre nom et prénom"/></label><button className="btn btn-primary" type="submit" disabled={busy}>{busy?"Enregistrement…":"Enregistrer le profil"}</button></form>
+            <div><div className="stat-foot">Rôles attribués</div><div style={{marginTop:6}}>{roles.map(r=><span className="pill" key={r.code} style={{marginRight:6}}>{r.name}</span>)}</div><div className="stat-foot" style={{marginTop:10}}>Statut du compte : {profile?.status||"Non renseigné"}</div></div>
+          </div></div>
+          <div className="panel"><div className="panel-head"><div><div className="panel-title">Modifier l’adresse e-mail</div><div className="panel-desc">Une confirmation sera envoyée à la nouvelle adresse. L’ancienne reste valable jusqu’à validation.</div></div></div><div className="panel-body"><form onSubmit={requestEmailChange} style={{display:"grid",gap:12,maxWidth:560}}><label className="field">Adresse e-mail actuelle<input value={user.email||""} disabled/></label><label className="field">Nouvelle adresse e-mail<input type="email" required value={settingsEmail} onChange={e=>setSettingsEmail(e.target.value)} placeholder="nouvelle-adresse@exemple.com"/></label><button className="btn btn-primary" type="submit" disabled={busy}>{busy?"Envoi…":"Envoyer la confirmation"}</button></form></div></div>
+          <div className="panel"><div className="panel-head"><div><div className="panel-title">Changer le mot de passe</div><div className="panel-desc">Votre mot de passe actuel est vérifié avant l’enregistrement du nouveau.</div></div></div><div className="panel-body"><form onSubmit={saveAccountPassword} style={{display:"grid",gap:12,maxWidth:560}}><label className="field">Mot de passe actuel<input type="password" autoComplete="current-password" required value={settingsCurrentPassword} onChange={e=>setSettingsCurrentPassword(e.target.value)} /></label><label className="field">Nouveau mot de passe<input type="password" autoComplete="new-password" minLength={8} required value={settingsNewPassword} onChange={e=>setSettingsNewPassword(e.target.value)} placeholder="8 caractères minimum"/></label><label className="field">Confirmer le nouveau mot de passe<input type="password" autoComplete="new-password" minLength={8} required value={settingsPasswordConfirmation} onChange={e=>setSettingsPasswordConfirmation(e.target.value)} /></label><button className="btn btn-primary" type="submit" disabled={busy}>{busy?"Modification…":"Modifier le mot de passe"}</button></form></div></div>
+          <div className="panel"><div className="panel-head"><div className="panel-title">Session</div></div><div className="panel-body" style={{display:"grid",gap:10}}><div><div className="stat-foot">Identifiant public</div><strong>{profile?.public_id||"Non renseigné"}</strong></div><button className="btn" style={{justifySelf:"start"}} onClick={handleSignOut}>Se déconnecter de cette session</button></div></div></>}
         <div style={{textAlign:"center",fontSize:10,color:"#9aa6b5",padding:"12px 0 0"}}>AÉRO SERVICE · Plateforme de gestion · {new Date().getFullYear()}</div>
       </main>
     </section>
