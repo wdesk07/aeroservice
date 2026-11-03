@@ -553,7 +553,10 @@ export default function Home() {
     setBusy(true); setError(""); setNotice("");
     const nextEmail = settingsEmail.trim().toLowerCase();
     if (!nextEmail || nextEmail === (user.email || "").toLowerCase()) { setError("Saisissez une nouvelle adresse e-mail différente de l’actuelle."); setBusy(false); return; }
-    const { error: emailError } = await supabase.auth.updateUser(\n      { email: nextEmail },\n      { emailRedirectTo: "https://aero-service.vercel.app/" }\n    );
+    const { error: emailError } = await supabase.auth.updateUser(
+      { email: nextEmail },
+      { emailRedirectTo: "https://aero-service.vercel.app/" }
+    );
     if (emailError) setError("La demande de changement d’e-mail a échoué : " + emailError.message);
     else setNotice("Demande envoyée. Ouvrez le message de confirmation envoyé à la nouvelle adresse e-mail pour terminer le changement. L’adresse actuelle reste active jusque-là.");
     setBusy(false);
