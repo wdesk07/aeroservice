@@ -269,7 +269,7 @@ export default function Home() {
     const { data: accountData, error: accountError } = await supabase.functions.invoke("my-account-status");
     if (!accountError && accountData) {
       const identitySnapshot = {
-        profile: (accountData.profile as Profile | null) ?? null,
+        profile: accountData.profile ? { ...(accountData.profile as Profile), email: current.email ?? (accountData.profile as Profile).email ?? null } : null,
         roles: (accountData.roles ?? []) as Role[],
         formation: (accountData.formation as AccountFormation | null) ?? null,
         studentNumber: typeof accountData.student_number === "string" ? accountData.student_number : null,
