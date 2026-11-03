@@ -269,7 +269,7 @@ export default function Home() {
     const { data: accountData, error: accountError } = await supabase.functions.invoke("my-account-status");
     if (!accountError && accountData) {
       const identitySnapshot = {
-        profile: (accountData.profile as Profile | null) ?? null,
+        profile: accountData.profile ? { ...(accountData.profile as Profile), email: current.email ?? (accountData.profile as Profile).email ?? null } : null,
         roles: (accountData.roles ?? []) as Role[],
         formation: (accountData.formation as AccountFormation | null) ?? null,
         studentNumber: typeof accountData.student_number === "string" ? accountData.student_number : null,
@@ -553,7 +553,7 @@ export default function Home() {
     setBusy(true); setError(""); setNotice("");
     const nextEmail = settingsEmail.trim().toLowerCase();
     if (!nextEmail || nextEmail === (user.email || "").toLowerCase()) { setError("Saisissez une nouvelle adresse e-mail différente de l’actuelle."); setBusy(false); return; }
-    const { error: emailError } = await supabase.auth.updateUser({ email: nextEmail });
+    const { error: emailError } = await supabase.auth.updateUser(\n      { email: nextEmail },\n      { emailRedirectTo: "https://aero-service.vercel.app/" }\n    );
     if (emailError) setError("La demande de changement d’e-mail a échoué : " + emailError.message);
     else setNotice("Demande envoyée. Ouvrez le message de confirmation envoyé à la nouvelle adresse e-mail pour terminer le changement. L’adresse actuelle reste active jusque-là.");
     setBusy(false);
