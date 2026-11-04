@@ -183,25 +183,24 @@ export default function DirectionSuiviPage() {
       if (student.formation_id && formationNameById.has(student.formation_id)) studentNames[student.id] = formationNameById.get(student.formation_id)!;
     }
     setStudentFormationNames(studentNames);
-    const attendanceIds = [...new Set([
-      ...attendance.map((row) => row.id),
-      ...[...uniqueSessionRows.values()].map((row) => row.daily_attendance_id).filter((id): id is string => Boolean(id))
-    ])];
-    if (attendanceIds.length > 0) {
-      const { data: waivedRows, error: waivedPenaltyError } = await supabase
-        .from("penalties")
-        .select("attendance_id")
-        .eq("status", "waived")
-        .in("attendance_id", attendanceIds)
-        .limit(2000);
-      if (waivedPenaltyError) {
-        setWaivedAttendanceIds([]);
-        setError("Les présences sont chargées, mais les dispenses de pénalité ne sont pas accessibles : " + waivedPenaltyError.message);
-      } else {
-        setWaivedAttendanceIds([...new Set((waivedRows ?? []).map((row: { attendance_id: string | null }) => row.attendance_id).filter((id): id is string => Boolean(id)))]);
-      }
-    } else {
+    // Les dispenses manuelles existantes ne renseignent pas toujours attendance_id.
+    // On les rattache donc au pointage journalier par personne + date locale,
+    // sans modifier le statut ni les données du pointage.
+    const { data: waivedRows, error: waivedPenaltyError } = await supabase
+      .from("penalties")
+      .select("person_id,calculated_at")
+      .eq("status", "waived")
+      .limit(2000);
+    if (waivedPenaltyError) {
       setWaivedAttendanceIds([]);
+      setError("Les présences sont chargées, mais les dispenses de pénalité ne sont pas accessibles : " + waivedPenaltyError.message);
+    } else {
+      const waivedKeys = new Set((waivedRows ?? []).map((row: { person_id: string; calculated_at: string }) =>
+        `${row.person_id}:${localDateString(new Date(row.calculated_at))}`
+      ));
+      setWaivedAttendanceIds([...new Set(attendance
+        .filter((row) => waivedKeys.has(`${row.person_id}:${row.local_date}`))
+        .map((row) => row.id))]);
     }
     setRows(attendance);
     setBusy(false);
@@ -241,10 +240,10 @@ export default function DirectionSuiviPage() {
     if (statusFilter === "present" && !["present", "on_time"].includes(status)) return false;
     if (statusFilter === "late" && status !== "late") return false;
     if (statusFilter === "absent" && status !== "absent") return false;
-    if (statusFilter === "regularized" && !["regularized", "regularized_late", "regularised", "regularised_late", "paid"].includes(status)) return false;
+    if (statusFilter === "regularized" && !["regularized", "regularized_late", "regularised", "regularised_late", "paid"].includes(status) && !waivedAttendanceSet.has(row.id)) return false;
     if (statusFilter === "upcoming" && !["scheduled", "upcoming", "pending"].includes(status)) return false;
     return true;
-  }), [rows, personTypeFilter, formationFilter, statusFilter, studentFormationNames]);
+  }), [rows, personTypeFilter, formationFilter, statusFilter, studentFormationNames, waivedAttendanceSet]);
   const filteredSessionRows = useMemo(() => sessionRows.filter((row) => {
     if (personTypeFilter === "staff") return false;
     if (formationFilter !== "all" && row.formation_name !== formationFilter) return false;
