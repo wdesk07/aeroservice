@@ -147,7 +147,7 @@ export default function SecretariatQrCheckinsPage() {
                   <p style={{ margin: "4px 0", color: "#52647a" }}>Formation : <strong>{item.formation_name || "Formation à vérifier"}</strong></p>
                   <p style={{ margin: "4px 0", color: "#52647a" }}>Demande reçue à {localTime(item.requested_at)} · Début prévu {localTime(item.planned_start)}</p>
                 </div>
-                <div style={{ minWidth: 150, borderRadius: 10, padding: 12, background: Number(item.delay_minutes) > 0 ? "#fff3cd" : "#eaf7ef", color: Number(item.delay_minutes) > 0 ? "#805b00" : "#17663b" }}>
+                <div style={{ minWidth: 150, borderRadius: 10, padding: 12, background: Number(item.delay_minutes) > 0 ? "#fff0f0" : "#eaf7ef", color: Number(item.delay_minutes) > 0 ? "#b42318" : "#17663b", border: Number(item.delay_minutes) > 0 ? "1px solid #f2b8b5" : "1px solid #b8e1c4" }}>
                   <div style={{ fontSize: 12, fontWeight: 700 }}>RETARD CALCULÉ</div>
                   <div style={{ fontSize: 25, fontWeight: 800 }}>{Number(item.delay_minutes)} min</div>
                   <div style={{ fontSize: 12 }}>{Number(item.delay_minutes) > 0 ? "À régulariser" : "À l’heure"}</div>
