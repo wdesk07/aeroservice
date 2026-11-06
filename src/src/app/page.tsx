@@ -382,8 +382,12 @@ export default function Home() {
           penalty_amount_fcfa: null,
           penalty_status: null
         }));
-        if (user) saveOfflineSnapshot(user.id, `module_${key}`, mapped);
-        setRows(mapped);
+        const personIds = [...new Set(mapped.map((row: Record<string, unknown>) => String(row.person_id ?? "")).filter(Boolean))];
+        const { data: people } = await supabase.from("profiles").select("id,display_name,first_name,last_name").in("id", personIds);
+        const personNames = new Map((people ?? []).map((person: any) => [person.id, person.display_name || [person.first_name, person.last_name].filter(Boolean).join(" ") || person.id]));
+        const namedRows = mapped.map((row: Record<string, unknown>) => ({ ...row, person_name: personNames.get(String(row.person_id ?? "")) ?? String(row.person_id ?? "—") }));
+        if (user) saveOfflineSnapshot(user.id, `module_${key}`, namedRows);
+        setRows(namedRows);
         setLoading(false);
         return;
       }
@@ -405,8 +409,17 @@ export default function Home() {
       }
     } else {
       const snapshot = (result.data ?? []) as unknown as Record<string, unknown>[];
-      if (user) saveOfflineSnapshot(user.id, `module_${key}`, snapshot);
-      setRows(snapshot);
+      if (key === "attendance" && snapshot.length) {
+        const personIds = [...new Set(snapshot.map((row) => String(row.person_id ?? "")).filter(Boolean))];
+        const { data: people } = await supabase.from("profiles").select("id,display_name,first_name,last_name").in("id", personIds);
+        const personNames = new Map((people ?? []).map((person: any) => [person.id, person.display_name || [person.first_name, person.last_name].filter(Boolean).join(" ") || person.id]));
+        const namedRows = snapshot.map((row) => ({ ...row, person_name: personNames.get(String(row.person_id ?? "")) ?? String(row.person_id ?? "—") }));
+        if (user) saveOfflineSnapshot(user.id, `module_${key}`, namedRows);
+        setRows(namedRows);
+      } else {
+        if (user) saveOfflineSnapshot(user.id, `module_${key}`, snapshot);
+        setRows(snapshot);
+      }
     }
     setLoading(false);
   }, [roles, user]);
