@@ -20,6 +20,7 @@ export default function LearnerQrScanPage() {
   const [busy, setBusy] = useState(false);
   const [isPersonnel, setIsPersonnel] = useState(false);
   const [resultStatus, setResultStatus] = useState<"on_time" | "late" | null>(null);
+  const [resultDelay, setResultDelay] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,8 +47,8 @@ export default function LearnerQrScanPage() {
         setIsPersonnel(personnel);
         setState("ready");
         setMessage(personnel
-          ? "Compte du personnel reconnu. Scannez le QR officiel au centre ; le serveur vérifiera vos droits, les horaires et votre position GPS."
-          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle, votre séance et votre position GPS.");
+          ? "Compte du personnel reconnu. Scannez le QR officiel affiché au centre. La localisation GPS du téléphone n’est plus nécessaire ; le serveur vérifie votre compte et l’horaire."
+          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Aucune localisation GPS ne sera demandée ; présentez-vous ensuite au secrétariat pour confirmer physiquement votre présence.");
       }
     }
     void checkSession();
@@ -91,28 +92,33 @@ export default function LearnerQrScanPage() {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
-      setMessage("QR reconnu. Vérification de votre position et de la séance…");
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          resolve,
-          err => reject(new Error(err.code === err.PERMISSION_DENIED ? "Autorisez la localisation pour demander le pointage." : "Position GPS indisponible ou trop imprécise. Réessayez à l’extérieur.")),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-      });
-      const { data, error } = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_with_gps" : "request_qr_checkin_with_gps", {
-        p_latitude: position.coords.latitude,
-        p_longitude: position.coords.longitude,
-        p_accuracy_m: Math.round(position.coords.accuracy)
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
-      setState("done");
-      const status = String(data.status || "").toLowerCase();
-      const late = status === "late" || Boolean(data.access_blocked) || Number(data.delay_minutes || 0) > Number(data.tolerance_minutes ?? 15);
-      setResultStatus(late ? "late" : "on_time");
-      setMessage(late
-        ? "RETARD CONSTATÉ — Votre arrivée a été enregistrée à " + Number(data.delay_minutes || 0) + " minute(s) de retard. L’accès au cours est bloqué jusqu’à régularisation auprès du secrétariat."
-        : "PRÉSENCE CONFIRMÉE — Vous êtes arrivé à l’heure. Votre pointage est enregistré : vous pouvez accéder au cours.");
+      if (isPersonnel) {
+        setMessage("QR reconnu. Vérification du compte, de l’horaire et du pointage (sans GPS)…");
+        const { data, error } = await supabase.rpc("qr_daily_checkin_without_gps", {
+          p_checkpoint_id: "a7c6e512-0f06-447e-b57b-8831d11f7ae9"
+        });
+        if (error) throw new Error(error.message);
+        if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé le pointage.");
+        setState("done");
+        const late = String(data.status || "").toLowerCase() === "late";
+        const minutes = Number(data.minutes_after_cutoff || 0);
+        setResultStatus(late ? "late" : "on_time");
+        setMessage(late
+          ? "RETARD CONSTATÉ — Votre arrivée est enregistrée avec " + minutes + " minute(s) de retard. Les règles habituelles de régularisation s’appliquent."
+          : "POINTAGE PERSONNEL CONFIRMÉ — Votre présence est enregistrée à l’heure.");
+      } else {
+        setMessage("QR reconnu. Envoi de votre demande de pointage sans localisation GPS…");
+        const { data, error } = await supabase.rpc("request_qr_checkin_without_gps");
+        if (error) throw new Error(error.message);
+        if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
+        setState("done");
+        const delay = Math.max(0, Number(data.delay_minutes || 0));
+        setResultDelay(delay);
+        setResultStatus(delay > 0 ? "late" : "on_time");
+        setMessage(delay > 0
+          ? "PRÉSENT EN RETARD — " + delay + " minute(s) de retard constatées. Votre demande est envoyée au secrétariat pour confirmation physique. Le scan seul ne valide pas votre présence et ne donne pas accès au cours."
+          : "PRÉSENT À L’HEURE — Votre demande de pointage est enregistrée à l’heure. Présentez-vous au secrétariat pour la confirmation physique. Le scan seul ne valide pas votre présence et ne donne pas accès au cours.");
+      }
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");
@@ -130,10 +136,10 @@ export default function LearnerQrScanPage() {
         <div><strong style={{ fontSize: 20 }}>AÉRO SERVICE</strong><div style={{ color: "#65758b", fontSize: 13 }}>Pointage par QR · apprenants et personnel</div></div>
       </header>
       <h1 style={{ fontSize: 24, marginBottom: 8 }}>Scanner pour pointer</h1>
-      <p role={state === "done" ? "status" : undefined} style={{ color: resultStatus === "on_time" ? "#166534" : resultStatus === "late" ? "#991b1b" : "#53647a", background: resultStatus === "on_time" ? "#dcfce7" : resultStatus === "late" ? "#fee2e2" : "transparent", border: resultStatus ? `1px solid ${resultStatus === "on_time" ? "#86efac" : "#fca5a5"}` : "1px solid transparent", borderRadius: 12, padding: resultStatus ? 16 : 0, fontWeight: resultStatus ? 700 : 400, lineHeight: 1.6 }}>{message}</p>
+      <p role={state === "done" ? "status" : undefined} style={{ color: resultStatus === "on_time" ? "#166534" : resultStatus === "late" ? "#991b1b" : "#53647a", background: resultStatus === "on_time" ? "#dcfce7" : resultStatus === "late" ? "#fee2e2" : "transparent", border: resultStatus ? `1px solid ${resultStatus === "on_time" ? "#86efac" : "#fca5a5"}` : "1px solid transparent", borderRadius: 12, padding: resultStatus ? 16 : 0, fontWeight: resultStatus ? 800 : 400, fontSize: resultStatus ? 18 : 16, lineHeight: 1.6, textAlign: resultStatus ? "center" : "left" }}>{message}</p>
       <video ref={videoRef} playsInline muted style={{ display: state === "scanning" ? "block" : "none", width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 12, background: "#101828", margin: "16px 0" }} />
       {state === "ready" || state === "error" ? <button onClick={() => void startScan()} disabled={busy} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Ouvrir la caméra et scanner</button> : null}
-      {state === "done" ? <button onClick={() => { setState("ready"); setResultStatus(null); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
+      {state === "done" ? <button onClick={() => { setState("ready"); setResultStatus(null); setResultDelay(0); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
       <p style={{ marginTop: 20 }}><Link href="/" style={{ color: "#1769d2", fontWeight: 700, textDecoration: "none" }}>← Retour à mon espace</Link></p>
     </section>
   </main>;
