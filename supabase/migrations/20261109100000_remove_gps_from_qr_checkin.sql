@@ -2,6 +2,7 @@
 -- Use a dedicated RPC so legacy GPS-enforced QR and personnel flows remain unchanged.
 -- This function creates a pending request; it does NOT write attendance.
 -- A secretary must physically verify the learner and approve the request.
+-- The planned_start conversion supports both TEST (time) and PROD (timestamptz) schemas.
 
 create or replace function public.request_qr_checkin_without_gps()
 returns jsonb
@@ -18,6 +19,8 @@ declare
   v_request public.qr_checkin_requests%rowtype;
   v_id uuid;
   v_delay integer;
+  v_planned_start_text text;
+  v_planned_at timestamptz;
 begin
   if v_uid is null then
     raise exception 'AUTH_REQUIRED';
@@ -59,13 +62,21 @@ begin
     raise exception 'NO_TRAINING_SESSION_SCHEDULED_TODAY';
   end if;
 
+  v_planned_start_text := to_jsonb(v_session)->>'planned_start';
+  if length(v_planned_start_text) > 10 then
+    v_planned_at := v_planned_start_text::timestamptz;
+  else
+    v_planned_at := (v_session.session_date + v_planned_start_text::time)
+      at time zone 'Africa/Porto-Novo';
+  end if;
+
   perform pg_advisory_xact_lock(hashtextextended(v_uid::text || ':' || v_session.id::text, 0));
 
   if exists (
-    select 1 from public.attendance a
-    where a.person_id = v_uid
-      and a.session_id = v_session.id
-      and lower(a.person_type) = 'student'
+    select 1 from public.qr_checkin_requests q
+    where q.person_id = v_uid
+      and q.session_id = v_session.id
+      and q.status = 'approved'
   ) then
     raise exception 'ATTENDANCE_ALREADY_RECORDED';
   end if;
@@ -79,13 +90,7 @@ begin
   limit 1;
 
   if found then
-    v_delay := greatest(
-      0,
-      ceil(extract(epoch from (
-        (v_request.requested_at at time zone 'Africa/Porto-Novo')
-        - (v_session.session_date + (v_session.planned_start at time zone 'Africa/Porto-Novo')::time)
-      )) / 60)::integer
-    );
+    v_delay := greatest(0, ceil(extract(epoch from (v_request.requested_at - v_planned_at)) / 60)::integer);
     return jsonb_build_object(
       'ok', true,
       'duplicate', true,
@@ -109,12 +114,7 @@ begin
   values (v_uid, v_session.id, v_now, 'pending_confirmation')
   returning id into v_id;
 
-  v_delay := greatest(
-    0,
-    ceil(extract(epoch from (
-      v_local - (v_session.session_date + (v_session.planned_start at time zone 'Africa/Porto-Novo')::time)
-    )) / 60)::integer
-  );
+  v_delay := greatest(0, ceil(extract(epoch from (v_now - v_planned_at)) / 60)::integer);
 
   return jsonb_build_object(
     'ok', true,
