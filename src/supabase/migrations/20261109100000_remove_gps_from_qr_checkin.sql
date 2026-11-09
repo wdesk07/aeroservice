@@ -134,6 +134,10 @@ begin
 end;
 $function$;
 
+-- The normal QR RPC is now called directly by the learner screen.
+revoke all on function public.request_qr_checkin() from public, anon;
+grant execute on function public.request_qr_checkin() to authenticated;
+
 -- Compatibility wrapper: keep the old signature for older clients, but ignore
 -- GPS inputs and delegate to the normal authenticated QR check-in.
 create or replace function public.request_qr_checkin_with_gps(
