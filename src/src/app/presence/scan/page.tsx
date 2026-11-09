@@ -47,7 +47,7 @@ export default function LearnerQrScanPage() {
         setState("ready");
         setMessage(personnel
           ? "Compte du personnel reconnu. Scannez le QR officiel au centre ; le serveur vérifiera vos droits, les horaires et votre position GPS."
-          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle, votre séance et votre position GPS.");
+          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Aucune localisation GPS ne sera demandée ; présentez-vous ensuite au secrétariat pour confirmer physiquement votre présence.");
       }
     }
     void checkSession();
@@ -91,28 +91,38 @@ export default function LearnerQrScanPage() {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
-      setMessage("QR reconnu. Vérification de votre position et de la séance…");
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          resolve,
-          err => reject(new Error(err.code === err.PERMISSION_DENIED ? "Autorisez la localisation pour demander le pointage." : "Position GPS indisponible ou trop imprécise. Réessayez à l’extérieur.")),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-      });
-      const { data, error } = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_with_gps" : "request_qr_checkin_with_gps", {
-        p_latitude: position.coords.latitude,
-        p_longitude: position.coords.longitude,
-        p_accuracy_m: Math.round(position.coords.accuracy)
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
-      setState("done");
-      const status = String(data.status || "").toLowerCase();
-      const late = status === "late" || Boolean(data.access_blocked) || Number(data.delay_minutes || 0) > Number(data.tolerance_minutes ?? 15);
-      setResultStatus(late ? "late" : "on_time");
-      setMessage(late
-        ? "RETARD CONSTATÉ — Votre arrivée a été enregistrée à " + Number(data.delay_minutes || 0) + " minute(s) de retard. L’accès au cours est bloqué jusqu’à régularisation auprès du secrétariat."
-        : "PRÉSENCE CONFIRMÉE — Vous êtes arrivé à l’heure. Votre pointage est enregistré : vous pouvez accéder au cours.");
+      if (isPersonnel) {
+        setMessage("QR reconnu. Vérification de votre position GPS et de vos droits…");
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            resolve,
+            err => reject(new Error(err.code === err.PERMISSION_DENIED ? "Autorisez la localisation pour demander le pointage du personnel." : "Position GPS indisponible ou trop imprécise. Réessayez à l’extérieur.")),
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          );
+        });
+        const { data, error } = await supabase.rpc("request_personnel_qr_checkin_with_gps", {
+          p_latitude: position.coords.latitude,
+          p_longitude: position.coords.longitude,
+          p_accuracy_m: Math.round(position.coords.accuracy)
+        });
+        if (error) throw new Error(error.message);
+        if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
+        setState("done");
+        const status = String(data.status || "").toLowerCase();
+        const late = status === "late" || Boolean(data.access_blocked) || Number(data.delay_minutes || 0) > Number(data.tolerance_minutes ?? 15);
+        setResultStatus(late ? "late" : "on_time");
+        setMessage(late
+          ? "RETARD CONSTATÉ — Votre arrivée a été enregistrée à " + Number(data.delay_minutes || 0) + " minute(s) de retard. L’accès au service est bloqué jusqu’à régularisation."
+          : "POINTAGE PERSONNEL CONFIRMÉ — Votre pointage a été enregistré.");
+      } else {
+        setMessage("QR reconnu. Envoi de votre demande de pointage sans localisation GPS…");
+        const { data, error } = await supabase.rpc("request_qr_checkin_without_gps");
+        if (error) throw new Error(error.message);
+        if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
+        setState("done");
+        setResultStatus(null);
+        setMessage("DEMANDE ENVOYÉE — Présentez-vous au secrétariat pour la confirmation physique de votre présence. Le scan seul ne valide pas votre présence et ne donne pas accès au cours.");
+      }
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");
