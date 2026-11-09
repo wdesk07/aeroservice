@@ -101,7 +101,7 @@ export default function LearnerQrScanPage() {
         if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé le pointage.");
         setState("done");
         const late = String(data.status || "").toLowerCase() === "late";
-        const minutes = Number(data.minutes_after_cutoff || 0);
+        const minutes = Number(data.delay_minutes || 0);
         setResultStatus(late ? "late" : "on_time");
         setMessage(late
           ? "RETARD CONSTATÉ — Votre arrivée est enregistrée avec " + minutes + " minute(s) de retard. Les règles habituelles de régularisation s’appliquent."
