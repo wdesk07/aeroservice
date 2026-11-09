@@ -88,7 +88,7 @@ export default function LearnerQrScanPage() {
       const allowedPaths = isPersonnel
         ? ["/presence/personnel-qr", "/presence/personnel-qr/", "/presence/borne", "/presence/borne/"]
         : ["/presence/qr", "/presence/qr/"];
-      if (!allowedPaths.includes(scanned.pathname) || !(scanned.hostname === "aero-service.vercel.app" || scanned.hostname.endsWith(".vercel.app"))) {
+      if (!allowedPaths.includes(scanned.pathname) || scanned.origin !== window.location.origin) {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
