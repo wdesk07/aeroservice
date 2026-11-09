@@ -64,11 +64,7 @@ export default function MobileQrCheckinPage() {
       });
       if (sessionError || !sessionData.user) throw new Error("Connexion apprenant impossible.");
 
-      const { data, error: requestError } = await supabase.rpc("request_qr_checkin_with_gps", {
-        p_latitude: null,
-        p_longitude: null,
-        p_accuracy_m: null
-      });
+      const { data, error: requestError } = await supabase.rpc("request_qr_checkin_without_gps");
       await supabase.auth.signOut();
       setPassword("");
       if (requestError) throw new Error(requestError.message);
