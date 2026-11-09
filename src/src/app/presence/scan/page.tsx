@@ -46,8 +46,8 @@ export default function LearnerQrScanPage() {
         setIsPersonnel(personnel);
         setState("ready");
         setMessage(personnel
-          ? "Compte du personnel reconnu. Scannez le QR officiel au centre ; le serveur vérifiera vos droits, les horaires et votre position GPS."
-          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle, votre séance et votre position GPS.");
+          ? "Compte du personnel reconnu. Scannez le QR officiel au centre ; le serveur vérifiera vos droits et les horaires, sans géolocalisation."
+          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle et votre séance, sans géolocalisation.");
       }
     }
     void checkSession();
@@ -87,32 +87,29 @@ export default function LearnerQrScanPage() {
       const allowedPaths = isPersonnel
         ? ["/presence/personnel-qr", "/presence/personnel-qr/", "/presence/borne", "/presence/borne/"]
         : ["/presence/qr", "/presence/qr/"];
-      if (!allowedPaths.includes(scanned.pathname) || !(scanned.hostname === "aero-service.vercel.app" || scanned.hostname.endsWith(".vercel.app"))) {
+      if (!allowedPaths.includes(scanned.pathname) || scanned.origin !== window.location.origin) {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
-      setMessage("QR reconnu. Vérification de votre position et de la séance…");
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          resolve,
-          err => reject(new Error(err.code === err.PERMISSION_DENIED ? "Autorisez la localisation pour demander le pointage." : "Position GPS indisponible ou trop imprécise. Réessayez à l’extérieur.")),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-      });
-      const { data, error } = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_with_gps" : "request_qr_checkin_with_gps", {
-        p_latitude: position.coords.latitude,
-        p_longitude: position.coords.longitude,
-        p_accuracy_m: Math.round(position.coords.accuracy)
-      });
+      setMessage("QR reconnu. Vérification du compte et de la séance…");
+      const { data, error } = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_without_gps" : "request_qr_checkin_without_gps");
       if (error) throw new Error(error.message);
       if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
       setState("done");
       const status = String(data.status || "").toLowerCase();
-      const late = status === "late" || Boolean(data.access_blocked) || Number(data.delay_minutes || 0) > Number(data.tolerance_minutes ?? 15);
+      const delay = Number(data.delay_minutes || 0);
+      const late = isPersonnel ? status === "late" || delay > 0 : Boolean(data.late) || delay > 15;
       setResultStatus(late ? "late" : "on_time");
-      setMessage(late
-        ? "RETARD CONSTATÉ — Votre arrivée a été enregistrée à " + Number(data.delay_minutes || 0) + " minute(s) de retard. L’accès au cours est bloqué jusqu’à régularisation auprès du secrétariat."
-        : "PRÉSENCE CONFIRMÉE — Vous êtes arrivé à l’heure. Votre pointage est enregistré : vous pouvez accéder au cours.");
+      if (isPersonnel) {
+        const penalty = Number(data.penalty_amount_fcfa || 0);
+        setMessage(late
+          ? "EN RETARD — " + delay + " minute(s) de retard enregistrées par le serveur." + (penalty > 0 ? " Pénalité automatique : " + penalty.toLocaleString("fr-FR") + " FCFA." : " Aucune pénalité automatique n’a été créée par la règle applicable.")
+          : "À L’HEURE — Votre présence du personnel est enregistrée à " + new Date(data.arrived_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" }) + ".");
+      } else {
+        setMessage(late
+          ? "RETARD SIGNALÉ — " + delay + " minute(s). Votre demande a été envoyée et reste en attente de confirmation physique par le secrétariat. Le scan seul ne donne pas accès au cours."
+          : "DEMANDE ENVOYÉE — À L’HEURE. Présentez-vous au secrétariat pour la confirmation physique obligatoire avant l’accès au cours.");
+      }
     } catch (error) {
       setState("error");
       setMessage(error instanceof Error ? error.message : "Scan impossible. Réessayez.");

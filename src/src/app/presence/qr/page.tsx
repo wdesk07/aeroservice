@@ -15,6 +15,10 @@ type RequestResult = {
   status?: string;
   delay_minutes?: number;
   arrived_at?: string;
+  requested_at?: string;
+  planned_start?: string;
+  late?: boolean;
+  tolerance_minutes?: number;
 };
 
 function friendlyError(raw: string) {
@@ -29,10 +33,7 @@ function friendlyError(raw: string) {
     ATTENDANCE_ALREADY_RECORDED: "Votre présence est déjà enregistrée pour cette séance.",
     SERVICE_UNAVAILABLE: "Le service est temporairement indisponible. Réessayez ou présentez-vous au secrétariat.",
     TOO_MANY_ATTEMPTS: "Trop de tentatives. Attendez quinze minutes avant de réessayer.",
-    GPS_REQUIRED: "Autorisez la localisation GPS de votre téléphone pour demander le pointage.",
-    GPS_ACCURACY_TOO_LOW: "La position GPS n’est pas assez précise. Sortez à l’extérieur et réessayez.",
-    ATTENDANCE_LOCATION_NOT_CONFIGURED: "Le GPS du centre n’est pas encore configuré. Adressez-vous à la Direction.",
-    OUTSIDE_ATTENDANCE_GEOFENCE: "Vous êtes en dehors de la zone autorisée autour du centre. Le pointage est refusé."
+
   };
   const key = Object.keys(messages).find((item) => raw.includes(item));
   return key ? messages[key] : raw;
@@ -69,19 +70,7 @@ export default function MobileQrCheckinPage() {
       });
       if (sessionError || !sessionData.user) throw new Error("Connexion apprenant impossible.");
 
-      if (!("geolocation" in navigator)) throw new Error("GPS_REQUIRED");
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          resolve,
-          (geoError) => reject(new Error(geoError.code === geoError.PERMISSION_DENIED ? "GPS_REQUIRED" : "GPS_ACCURACY_TOO_LOW")),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-        );
-      });
-      const { data, error: requestError } = await supabase.rpc("request_qr_checkin_with_gps", {
-        p_latitude: position.coords.latitude,
-        p_longitude: position.coords.longitude,
-        p_accuracy_m: Math.round(position.coords.accuracy)
-      });
+      const { data, error: requestError } = await supabase.rpc("request_qr_checkin_without_gps");
       await supabase.auth.signOut();
       setPassword("");
       if (requestError) throw new Error(requestError.message);
@@ -112,7 +101,7 @@ export default function MobileQrCheckinPage() {
         {!result ? (
           <>
             <div style={{ borderRadius: 12, background: "#edf4ff", padding: 14, lineHeight: 1.55, marginBottom: 18 }}>
-              Scannez le QR code au centre, autorisez la localisation GPS et identifiez-vous. Le serveur vérifie que votre téléphone se trouve dans la zone autorisée. <strong>Votre présence ne sera définitive qu’après confirmation physique par le secrétariat.</strong>
+              Scannez le QR code officiel ou ouvrez directement cette page, puis identifiez-vous. Aucune géolocalisation n’est demandée. <strong>Votre présence ne sera définitive qu’après confirmation physique par le secrétariat.</strong>
             </div>
             <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
               <label style={labelStyle}>E-mail ou matricule apprenant
@@ -125,12 +114,12 @@ export default function MobileQrCheckinPage() {
             </form>
           </>
         ) : (
-          <div role="status" style={{ borderRadius: 14, padding: 18, background: delay > 0 ? "#fff3cd" : "#eaf7ef", border: "1px solid " + (delay > 0 ? "#f0d879" : "#b8e1c4"), lineHeight: 1.6 }}>
-            <h2 style={{ marginTop: 0, color: delay > 0 ? "#805b00" : "#17663b" }}>{delay > 0 ? "Vous êtes en retard" : "Demande de pointage envoyée"}</h2>
-            {delay > 0 ? (
-              <p>Retard calculé par le serveur : <strong>{delay} minute(s)</strong>. Veuillez vous présenter à la secrétaire pour confirmer votre présence et régulariser votre situation avant d’accéder au cours.</p>
+          <div role="status" style={{ borderRadius: 14, padding: 18, background: delay > 15 ? "#fff0f0" : "#eaf7ef", border: "1px solid " + (delay > 15 ? "#f3aaaa" : "#b8e1c4"), lineHeight: 1.6 }}>
+            <h2 style={{ marginTop: 0, color: delay > 15 ? "#9a1717" : "#17663b" }}>{delay > 15 ? "RETARD SIGNALÉ — CONFIRMATION EN ATTENTE" : "DEMANDE ENVOYÉE — À L’HEURE"}</h2>
+            {delay > 15 ? (
+              <p>Retard calculé par le serveur : <strong>{delay} minute(s)</strong>. Votre demande reste en attente de confirmation physique par le secrétariat. Le scan seul ne permet pas d’accéder au cours.</p>
             ) : (
-              <p>Votre demande a été enregistrée à l’heure prévue. Présentez-vous au secrétariat afin que votre présence physique soit confirmée avant l’accès au cours.</p>
+              <p>Votre demande a été enregistrée dans le délai prévu. Présentez-vous au secrétariat afin que votre présence physique soit confirmée avant l’accès au cours.</p>
             )}
             <p style={{ marginBottom: 0 }}>Référence : <strong>{result.request_id?.slice(0, 8).toUpperCase() || "—"}</strong>. Le scan seul ne donne pas l’autorisation d’entrer en cours.</p>
             <button type="button" onClick={() => { setResult(null); setIdentifier(""); setPassword(""); }} style={secondaryButton}>Terminer</button>
@@ -138,7 +127,7 @@ export default function MobileQrCheckinPage() {
         )}
 
         {error && <p role="alert" style={{ marginTop: 16, padding: 13, borderRadius: 10, background: "#fff0f0", color: "#8f2020", lineHeight: 1.5 }}>{error}</p>}
-        <p style={{ margin: "22px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.55 }}>Sécurité : la localisation GPS est obligatoire et contrôlée par le serveur contre la zone du centre. Le GPS peut être falsifié sur certains téléphones : la secrétaire doit toujours vous voir physiquement et confirmer le pointage.</p>
+        <p style={{ margin: "22px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.55 }}>Sécurité : le compte actif et la séance de formation sont vérifiés par le serveur. Sans géolocalisation, la confirmation physique par le secrétariat reste obligatoire avant l’accès au cours.</p>
       </section>
     </main>
   );
