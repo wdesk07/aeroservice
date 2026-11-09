@@ -20,6 +20,7 @@ export default function LearnerQrScanPage() {
   const [busy, setBusy] = useState(false);
   const [isPersonnel, setIsPersonnel] = useState(false);
   const [resultStatus, setResultStatus] = useState<"on_time" | "late" | null>(null);
+  const [resultDelay, setResultDelay] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,8 +112,12 @@ export default function LearnerQrScanPage() {
         if (error) throw new Error(error.message);
         if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
         setState("done");
-        setResultStatus(null);
-        setMessage("DEMANDE ENVOYÉE — Présentez-vous au secrétariat pour la confirmation physique de votre présence. Le scan seul ne valide pas votre présence et ne donne pas accès au cours.");
+        const delay = Math.max(0, Number(data.delay_minutes || 0));
+        setResultDelay(delay);
+        setResultStatus(delay > 0 ? "late" : "on_time");
+        setMessage(delay > 0
+          ? "PRÉSENT EN RETARD — " + delay + " minute(s) de retard constatées. Votre demande est envoyée au secrétariat pour confirmation physique. Le scan seul ne valide pas votre présence et ne donne pas accès au cours."
+          : "PRÉSENT À L’HEURE — Votre demande de pointage est enregistrée à l’heure. Présentez-vous au secrétariat pour la confirmation physique. Le scan seul ne valide pas votre présence et ne donne pas accès au cours.");
       }
     } catch (error) {
       setState("error");
@@ -131,10 +136,10 @@ export default function LearnerQrScanPage() {
         <div><strong style={{ fontSize: 20 }}>AÉRO SERVICE</strong><div style={{ color: "#65758b", fontSize: 13 }}>Pointage par QR · apprenants et personnel</div></div>
       </header>
       <h1 style={{ fontSize: 24, marginBottom: 8 }}>Scanner pour pointer</h1>
-      <p role={state === "done" ? "status" : undefined} style={{ color: resultStatus === "on_time" ? "#166534" : resultStatus === "late" ? "#991b1b" : "#53647a", background: resultStatus === "on_time" ? "#dcfce7" : resultStatus === "late" ? "#fee2e2" : "transparent", border: resultStatus ? `1px solid ${resultStatus === "on_time" ? "#86efac" : "#fca5a5"}` : "1px solid transparent", borderRadius: 12, padding: resultStatus ? 16 : 0, fontWeight: resultStatus ? 700 : 400, lineHeight: 1.6 }}>{message}</p>
+      <p role={state === "done" ? "status" : undefined} style={{ color: resultStatus === "on_time" ? "#166534" : resultStatus === "late" ? "#991b1b" : "#53647a", background: resultStatus === "on_time" ? "#dcfce7" : resultStatus === "late" ? "#fee2e2" : "transparent", border: resultStatus ? `1px solid ${resultStatus === "on_time" ? "#86efac" : "#fca5a5"}` : "1px solid transparent", borderRadius: 12, padding: resultStatus ? 16 : 0, fontWeight: resultStatus ? 800 : 400, fontSize: resultStatus ? 18 : 16, lineHeight: 1.6, textAlign: resultStatus ? "center" : "left" }}>{message}</p>
       <video ref={videoRef} playsInline muted style={{ display: state === "scanning" ? "block" : "none", width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 12, background: "#101828", margin: "16px 0" }} />
       {state === "ready" || state === "error" ? <button onClick={() => void startScan()} disabled={busy} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Ouvrir la caméra et scanner</button> : null}
-      {state === "done" ? <button onClick={() => { setState("ready"); setResultStatus(null); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
+      {state === "done" ? <button onClick={() => { setState("ready"); setResultStatus(null); setResultDelay(0); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
       <p style={{ marginTop: 20 }}><Link href="/" style={{ color: "#1769d2", fontWeight: 700, textDecoration: "none" }}>← Retour à mon espace</Link></p>
     </section>
   </main>;
