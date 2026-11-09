@@ -28,7 +28,6 @@ function friendlyError(raw: string) {
     QR_CHECKIN_RATE_LIMIT: "Trop de demandes de pointage. Présentez-vous directement au secrétariat.",
     ATTENDANCE_ALREADY_RECORDED: "Votre présence est déjà enregistrée pour cette séance.",
     SERVICE_UNAVAILABLE: "Le service est temporairement indisponible. Réessayez ou présentez-vous au secrétariat.",
-    TOO_MANY_ATTEMPTS: "Trop de tentatives. Attendez quinze minutes avant de réessayer.",
   };
   const key = Object.keys(messages).find((item) => raw.includes(item));
   return key ? messages[key] : raw;
@@ -65,7 +64,11 @@ export default function MobileQrCheckinPage() {
       });
       if (sessionError || !sessionData.user) throw new Error("Connexion apprenant impossible.");
 
-      const { data, error: requestError } = await supabase.rpc("request_qr_checkin");
+      const { data, error: requestError } = await supabase.rpc("request_qr_checkin_with_gps", {
+        p_latitude: null,
+        p_longitude: null,
+        p_accuracy_m: null
+      });
       await supabase.auth.signOut();
       setPassword("");
       if (requestError) throw new Error(requestError.message);
@@ -122,7 +125,7 @@ export default function MobileQrCheckinPage() {
         )}
 
         {error && <p role="alert" style={{ marginTop: 16, padding: 13, borderRadius: 10, background: "#fff0f0", color: "#8f2020", lineHeight: 1.5 }}>{error}</p>}
-        <p style={{ margin: "22px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.55 }}>Sécurité : le pointage est enregistré après identification. La secrétaire doit toujours vous voir physiquement et confirmer votre présence avant l’accès au cours.</p>
+        <p style={{ margin: "22px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.55 }}>Sécurité : votre demande de pointage est transmise au secrétariat. La secrétaire doit toujours vous voir physiquement et confirmer votre présence avant l’accès au cours.</p>
       </section>
     </main>
   );
