@@ -28,7 +28,7 @@ export default function LearnerQrScanPage() {
       if (cancelled) return;
       if (error || !data.user) {
         setState("error");
-        setMessage("Connectez-vous à votre espace apprenant avant de scanner le QR code.");
+        setMessage("Connectez-vous à votre espace avant de scanner le QR code.");
       } else {
         const { data: roleRows, error: roleError } = await supabase
           .from("user_roles").select("roles(code)").eq("user_id", data.user.id);
@@ -46,8 +46,8 @@ export default function LearnerQrScanPage() {
         setIsPersonnel(personnel);
         setState("ready");
         setMessage(personnel
-          ? "Compte du personnel reconnu. Scannez le QR officiel au centre ; le serveur vérifiera vos droits et les horaires, sans géolocalisation."
-          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. Le serveur vérifiera votre rôle et votre séance, sans géolocalisation.");
+          ? "Compte du personnel reconnu. Scannez le QR officiel du centre ; votre présence sera enregistrée sans géolocalisation."
+          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. La confirmation physique par le secrétariat reste obligatoire.");
       }
     }
     void checkSession();
@@ -91,20 +91,36 @@ export default function LearnerQrScanPage() {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
-      setMessage("QR reconnu. Vérification du compte et de la séance…");
+      setMessage("QR reconnu. Vérification du compte et du pointage existant…");
       const { data, error } = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_without_gps" : "request_qr_checkin_without_gps");
       if (error) throw new Error(error.message);
       if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
       setState("done");
       const status = String(data.status || "").toLowerCase();
       const delay = Number(data.delay_minutes || 0);
-      const late = isPersonnel ? status === "late" || delay > 0 : Boolean(data.late) || delay > 15;
+      const late = isPersonnel ? status === "late" || delay > 0 : Boolean(data.late) || status === "late" || delay > 15;
       setResultStatus(late ? "late" : "on_time");
+      const arrived = data.arrived_at
+        ? new Date(data.arrived_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })
+        : data.requested_at
+          ? new Date(data.requested_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })
+          : "";
       if (isPersonnel) {
         const penalty = Number(data.penalty_amount_fcfa || 0);
-        setMessage(late
-          ? "EN RETARD — " + delay + " minute(s) de retard enregistrées par le serveur." + (penalty > 0 ? " Pénalité automatique : " + penalty.toLocaleString("fr-FR") + " FCFA." : " Aucune pénalité automatique n’a été créée par la règle applicable.")
-          : "À L’HEURE — Votre présence du personnel est enregistrée à " + new Date(data.arrived_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" }) + ".");
+        const attendanceText = data.duplicate
+          ? "POINTAGE DÉJÀ ENREGISTRÉ — "
+          : late ? "EN RETARD — " : "PRÉSENCE DU PERSONNEL CONFIRMÉE — ";
+        setMessage(attendanceText + "Votre présence du personnel est enregistrée" + (arrived ? " à " + arrived : "") + "." +
+          (late ? " Retard calculé : " + delay + " minute(s)." : " Vous êtes arrivé à l’heure.") +
+          (penalty > 0 ? " Pénalité automatique : " + penalty.toLocaleString("fr-FR") + " FCFA." : "") +
+          " Ce résultat concerne votre présence professionnelle, pas un accès à un cours.");
+      } else if (data.already_confirmed) {
+        setMessage("PRÉSENCE DÉJÀ CONFIRMÉE — Votre pointage initial" + (arrived ? " de " + arrived : "") +
+          " est déjà enregistré. " + (late ? "Le statut initial reste : retard de " + delay + " minute(s)." : "Le statut initial est : à l’heure.") +
+          (data.access_blocked ? " Votre accès reste soumis à la situation de régularisation enregistrée auprès du secrétariat." : " Aucun nouveau pointage n’a été créé. Ce scan n’a rien modifié."));
+      } else if (data.duplicate) {
+        setMessage("DEMANDE DÉJÀ ENVOYÉE — Votre demande initiale" + (arrived ? " de " + arrived : "") +
+          " est toujours en attente de confirmation physique par le secrétariat. Aucun nouveau pointage ni nouveau retard n’a été créé.");
       } else {
         setMessage(late
           ? "RETARD SIGNALÉ — " + delay + " minute(s). Votre demande a été envoyée et reste en attente de confirmation physique par le secrétariat. Le scan seul ne donne pas accès au cours."
@@ -130,7 +146,7 @@ export default function LearnerQrScanPage() {
       <p role={state === "done" ? "status" : undefined} style={{ color: resultStatus === "on_time" ? "#166534" : resultStatus === "late" ? "#991b1b" : "#53647a", background: resultStatus === "on_time" ? "#dcfce7" : resultStatus === "late" ? "#fee2e2" : "transparent", border: resultStatus ? `1px solid ${resultStatus === "on_time" ? "#86efac" : "#fca5a5"}` : "1px solid transparent", borderRadius: 12, padding: resultStatus ? 16 : 0, fontWeight: resultStatus ? 700 : 400, lineHeight: 1.6 }}>{message}</p>
       <video ref={videoRef} playsInline muted style={{ display: state === "scanning" ? "block" : "none", width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 12, background: "#101828", margin: "16px 0" }} />
       {state === "ready" || state === "error" ? <button onClick={() => void startScan()} disabled={busy} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Ouvrir la caméra et scanner</button> : null}
-      {state === "done" ? <button onClick={() => { setState("ready"); setResultStatus(null); setMessage("Vous pouvez scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
+      {state === "done" ? <button onClick={() => { setState("ready"); setResultStatus(null); setMessage("Vous pouvez terminer ou scanner le QR officiel pour une nouvelle séance ou journée de service."); }} style={{ width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#1769d2", color: "#fff", fontWeight: 700, cursor: "pointer", marginTop: 12 }}>Terminé</button> : null}
       <p style={{ marginTop: 20 }}><Link href="/" style={{ color: "#1769d2", fontWeight: 700, textDecoration: "none" }}>← Retour à mon espace</Link></p>
     </section>
   </main>;
