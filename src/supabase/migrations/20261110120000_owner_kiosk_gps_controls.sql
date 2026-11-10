@@ -176,32 +176,44 @@ declare v_definition text;
 begin
   select pg_get_functiondef('public.request_qr_checkin_without_gps()'::regprocedure) into v_definition;
   v_definition := replace(v_definition,
-    "if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;",
-    "if v_uid is null then raise exception 'AUTH_REQUIRED'; end if; if public.attendance_gps_enabled() then raise exception 'GPS_REQUIRED'; end if;");
+    $old$if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;$old$,
+    $new$if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+  if public.attendance_gps_enabled() then raise exception 'GPS_REQUIRED'; end if;$new$);
   execute v_definition;
 
   select pg_get_functiondef('public.request_personnel_qr_checkin_without_gps()'::regprocedure) into v_definition;
   v_definition := replace(v_definition,
-    "if u is null then raise exception 'AUTH_REQUIRED'; end if;",
-    "if u is null then raise exception 'AUTH_REQUIRED'; end if; if public.attendance_gps_enabled() then raise exception 'GPS_REQUIRED'; end if;");
+    $old$if u is null then raise exception 'AUTH_REQUIRED'; end if;$old$,
+    $new$if u is null then raise exception 'AUTH_REQUIRED'; end if;
+  if public.attendance_gps_enabled() then raise exception 'GPS_REQUIRED'; end if;$new$);
   execute v_definition;
 
   select pg_get_functiondef('public.request_qr_checkin_with_gps(numeric,numeric,numeric)'::regprocedure) into v_definition;
   v_definition := replace(v_definition,
-    "begin\n  if v_uid is null then",
-    "begin\n  if not public.attendance_gps_enabled() then return public.request_qr_checkin() || jsonb_build_object('gps_required',false,'gps_verified',false); end if;\n  if v_uid is null then");
+    $old$begin
+  if v_uid is null then$old$,
+    $new$begin
+  if not public.attendance_gps_enabled() then return public.request_qr_checkin() || jsonb_build_object('gps_required',false,'gps_verified',false); end if;
+  if v_uid is null then$new$);
   execute v_definition;
 
   select pg_get_functiondef('public.request_personnel_qr_checkin_with_gps(numeric,numeric,numeric)'::regprocedure) into v_definition;
   v_definition := replace(v_definition,
-    "begin\n  if u is null then",
-    "begin\n  if not public.attendance_gps_enabled() then return public.request_personnel_qr_checkin_without_gps() || jsonb_build_object('gps_required',false,'gps_verified',false); end if;\n  if u is null then");
+    $old$begin
+  if u is null then$old$,
+    $new$begin
+  if not public.attendance_gps_enabled() then return public.request_personnel_qr_checkin_without_gps() || jsonb_build_object('gps_required',false,'gps_verified',false); end if;
+  if u is null then$new$);
   execute v_definition;
 
   select pg_get_functiondef('public.qr_checkin(uuid,text,numeric,numeric,numeric)'::regprocedure) into v_definition;
   v_definition := replace(v_definition,
-    "begin\n  if v_uid is null then",
-    "begin\n  if public.attendance_gps_enabled() and (p_lat is null or p_lng is null or p_accuracy_m is null or p_accuracy_m <= 0 or p_accuracy_m > 100) then raise exception 'GPS_REQUIRED'; end if;\n  if not public.attendance_gps_enabled() then p_lat := null; p_lng := null; p_accuracy_m := null; end if;\n  if v_uid is null then");
+    $old$begin
+  if v_uid is null then$old$,
+    $new$begin
+  if public.attendance_gps_enabled() and (p_lat is null or p_lng is null or p_accuracy_m is null or p_accuracy_m <= 0 or p_accuracy_m > 100) then raise exception 'GPS_REQUIRED'; end if;
+  if not public.attendance_gps_enabled() then p_lat := null; p_lng := null; p_accuracy_m := null; end if;
+  if v_uid is null then$new$);
   execute v_definition;
 end;
 $$;
@@ -212,8 +224,15 @@ declare v_definition text;
 begin
   select pg_get_functiondef('public.kiosk_daily_checkin(text,numeric,numeric,numeric)'::regprocedure) into v_definition;
   v_definition := replace(v_definition,
-    "  v_date := v_local::date;\n  IF v_local::time < public.kiosk_opening_time()",
-    "  v_date := v_local::date;\n  IF public.attendance_gps_enabled() THEN\n    IF p_lat IS NULL OR p_lng IS NULL OR p_accuracy_m IS NULL OR p_lat NOT BETWEEN -90 AND 90 OR p_lng NOT BETWEEN -180 AND 180 OR p_accuracy_m <= 0 OR p_accuracy_m > 100 THEN RAISE EXCEPTION 'GPS_REQUIRED_OR_INACCURATE'; END IF;\n    IF NOT EXISTS (SELECT 1 FROM public.checkpoints c WHERE c.active AND c.latitude IS NOT NULL AND c.longitude IS NOT NULL) THEN RAISE EXCEPTION 'CENTRE_GPS_NOT_CONFIGURED'; END IF;\n    IF NOT EXISTS (SELECT 1 FROM public.checkpoints c WHERE c.active AND c.latitude IS NOT NULL AND c.longitude IS NOT NULL AND 6371000 * 2 * asin(sqrt(power(sin(radians(p_lat-c.latitude)/2),2)+cos(radians(c.latitude))*cos(radians(p_lat))*power(sin(radians(p_lng-c.longitude)/2),2))) <= coalesce(c.radius_m,100) AND p_accuracy_m <= coalesce(c.radius_m,100)) THEN RAISE EXCEPTION 'OUTSIDE_CHECKPOINT_RADIUS'; END IF;\n  END IF;\n  IF v_local::time < public.kiosk_opening_time()");
+    $old$  v_date := v_local::date;
+  IF v_local::time < public.kiosk_opening_time()$old$,
+    $new$  v_date := v_local::date;
+  IF public.attendance_gps_enabled() THEN
+    IF p_lat IS NULL OR p_lng IS NULL OR p_accuracy_m IS NULL OR p_lat NOT BETWEEN -90 AND 90 OR p_lng NOT BETWEEN -180 AND 180 OR p_accuracy_m <= 0 OR p_accuracy_m > 100 THEN RAISE EXCEPTION 'GPS_REQUIRED_OR_INACCURATE'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.checkpoints c WHERE c.active AND c.latitude IS NOT NULL AND c.longitude IS NOT NULL) THEN RAISE EXCEPTION 'CENTRE_GPS_NOT_CONFIGURED'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.checkpoints c WHERE c.active AND c.latitude IS NOT NULL AND c.longitude IS NOT NULL AND 6371000 * 2 * asin(sqrt(power(sin(radians(p_lat-c.latitude)/2),2)+cos(radians(c.latitude))*cos(radians(p_lat))*power(sin(radians(p_lng-c.longitude)/2),2))) <= coalesce(c.radius_m,100) AND p_accuracy_m <= coalesce(c.radius_m,100)) THEN RAISE EXCEPTION 'OUTSIDE_CHECKPOINT_RADIUS'; END IF;
+  END IF;
+  IF v_local::time < public.kiosk_opening_time()$new$);
   if v_definition not like '%attendance_gps_enabled()%' then raise exception 'KIOSK_GPS_PATCH_ANCHOR_NOT_FOUND'; end if;
   execute v_definition;
 end;
