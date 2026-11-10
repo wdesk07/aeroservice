@@ -67,6 +67,7 @@ begin
   select array_agg(upper(r.code)) into v_roles
   from public.user_roles ur join public.roles r on r.id=ur.role_id where ur.user_id=p_actor_id;
   if not coalesce(v_roles,'{}'::text[]) @> array['DIRECTOR','PRE_ADMIN']::text[] then raise exception 'PRODUCTION_OWNER_ROLES_REQUIRED'; end if;
+  if p_gps_enabled and not exists(select 1 from public.checkpoints where active and latitude is not null and longitude is not null and coalesce(radius_m,0)>0) then raise exception 'GPS_CHECKPOINT_NOT_CONFIGURED'; end if;
 
   select coalesce(jsonb_object_agg(key,value),'{}'::jsonb) into v_before
   from public.system_settings where key in ('kiosk.opening_time','kiosk.closing_time','attendance.gps_enabled');
