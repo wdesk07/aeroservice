@@ -35,7 +35,7 @@ function errorMessage(raw: string) {
     AUTH_REQUIRED: "La session a expiré. Reconnectez-vous sur la borne.",
     KIOSK_NOT_REGISTERED: "Cette borne n’est pas activée. Demandez à la Direction de l’enregistrer.",
     KIOSK_ADMIN_REQUIRED: "Seuls la Direction, la pré-administration ou le secrétariat autorisé peuvent gérer la borne et l’ouverture administrative.",
-    OPERATING_DAY_CLOSED: "La journée administrative est fermée. Cela ne désactive pas la borne, qui suit son horaire automatique de 08 h 30 à 19 h 00.",
+    OPERATING_DAY_CLOSED: "La journée administrative est fermée. Cela ne désactive pas la borne, qui suit son horaire automatique de 07 h 30 à 19 h 00.",
     OPERATING_DAY_ALREADY_CLOSED: "La journée est déjà fermée. La borne ne peut plus être activée aujourd’hui.",
     OPERATING_DAY_NOT_OPEN: "Aucune journée administrative n’est ouverte. Cela n’empêche pas le pointage pendant les horaires autorisés de la borne.",
     INVALID_CREDENTIALS: "Identifiant ou mot de passe incorrect, ou compte apprenant non autorisé.",
@@ -269,7 +269,7 @@ export default function PresenceKioskPage() {
       const payload = await response.json();
       if (!response.ok || !payload?.activated) throw new Error(payload?.error || "KIOSK_ACTIVATION_FAILED");
       setDeviceRegistered(true);
-      setMessage("Borne enregistrée. Son activation dépend uniquement des horaires 08 h 30–19 h, pas de l’ouverture administrative.");
+      setMessage("Borne enregistrée. Son activation dépend uniquement des horaires 07 h 30–19 h, pas de l’ouverture administrative.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Activation impossible."));
     } finally {
@@ -501,14 +501,14 @@ export default function PresenceKioskPage() {
         {!loading && user && canManageOperatingDay && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
-            <p style={{ lineHeight: 1.5, color: "#52647a" }}>La borne de pointage est active automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative. Les boutons ci-dessous servent uniquement à enregistrer l’ouverture et la fermeture d’Aéro Service. Chaque action est horodatée et signalée à la Direction; la fermeture administrative ne désactive pas la borne avant 19 h 00.</p>
+            <p style={{ lineHeight: 1.5, color: "#52647a" }}>La borne de pointage est active automatiquement de 07 h 30 à 19 h 00, indépendamment de l’ouverture administrative. Les boutons ci-dessous servent uniquement à enregistrer l’ouverture et la fermeture d’Aéro Service. Chaque action est horodatée et signalée à la Direction; la fermeture administrative ne désactive pas la borne avant 19 h 00.</p>
             {canConfigureLocation && <div style={{ border: "1px solid #dce4ef", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <strong>Zone GPS du centre</strong>
               <p style={{ margin: "6px 0 10px", color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>Placez-vous physiquement à l’entrée du centre et enregistrez sa position GPS une seule fois. Elle est conservée dans la base et reste valable les jours suivants : ne recommencez pas chaque matin. Reconfigurez-la uniquement si la borne est déplacée ou si la position enregistrée est incorrecte. Zone autorisée : 100 mètres.</p>
               <button type="button" onClick={() => void configureCheckpointLocation()} disabled={busy} style={secondaryButton}>{busy ? "Enregistrement…" : "Enregistrer la position GPS du centre"}</button>
             </div>}
             {deviceRegistered ? (
-              <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée durablement sur cet appareil. Le pointage est disponible automatiquement de 08 h 30 à 19 h 00. Aucune nouvelle autorisation quotidienne du GPS n’est nécessaire.</p>
+              <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée durablement sur cet appareil. Le pointage est disponible automatiquement de 07 h 30 à 19 h 00. Aucune nouvelle autorisation quotidienne du GPS n’est nécessaire.</p>
             ) : (
               <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Enregistrer la borne sur cet appareil"}</button>
             )}
@@ -570,7 +570,7 @@ export default function PresenceKioskPage() {
             {!deviceRegistered ? (
               <>
                 <h2 style={{ marginTop: 0, fontSize: 18 }}>Gestion indépendante de la borne et de la journée — personnel autorisé</h2>
-                <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>La borne n’est pas encore enregistrée sur cet appareil. Un membre autorisé peut se connecter ci-dessous pour l’enregistrer. Après cette première opération, la borne fonctionne automatiquement de 08 h 30 à 19 h 00, indépendamment de l’ouverture administrative.</p>
+                <p role="alert" style={{ color: "#8f2020", lineHeight: 1.5 }}>La borne n’est pas encore enregistrée sur cet appareil. Un membre autorisé peut se connecter ci-dessous pour l’enregistrer. Après cette première opération, la borne fonctionne automatiquement de 07 h 30 à 19 h 00, indépendamment de l’ouverture administrative.</p>
                 <form onSubmit={loginStaff} style={{ display: "grid", gap: 12, marginTop: 12 }}>
                   <label style={labelStyle}>E-mail professionnel
                     <input autoComplete="username" type="email" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} style={inputStyle} placeholder="Votre e-mail professionnel" />
