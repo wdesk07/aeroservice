@@ -35,7 +35,7 @@ function errorMessage(raw: string) {
     AUTH_REQUIRED: "La session a expiré. Reconnectez-vous sur la borne.",
     KIOSK_NOT_REGISTERED: "Cette borne n’est pas activée. Demandez à la Direction de l’enregistrer.",
     KIOSK_ADMIN_REQUIRED: "Seuls la Direction, la pré-administration ou le secrétariat autorisé peuvent gérer la borne et l’ouverture administrative.",
-    OPERATING_DAY_CLOSED: "La journée administrative est fermée. Cela ne désactive pas la borne, qui suit son horaire automatique de 07 h 30 à 19 h 00.",
+    OPERATING_DAY_CLOSED: "La journée administrative est fermée. La borne suit indépendamment les horaires configurés dans WDESK Control Center.",
     OPERATING_DAY_ALREADY_CLOSED: "La journée est déjà fermée. La borne ne peut plus être activée aujourd’hui.",
     OPERATING_DAY_NOT_OPEN: "Aucune journée administrative n’est ouverte. Cela n’empêche pas le pointage pendant les horaires autorisés de la borne.",
     INVALID_CREDENTIALS: "Identifiant ou mot de passe incorrect, ou compte apprenant non autorisé.",
@@ -45,6 +45,9 @@ function errorMessage(raw: string) {
     STUDENT_CHECKIN_CLOSED: "La période de pointage quotidien est fermée.",
     CHECKIN_WINDOW_CLOSED: "La séance est terminée. Aucun nouveau pointage n’est accepté pour cette séance.",
     OUTSIDE_CHECKPOINT_RADIUS: "La position détectée est hors de la zone autorisée du centre.",
+    GPS_REQUIRED: "La Direction a activé le contrôle GPS. Autorisez la localisation précise pour pointer.",
+    GPS_REQUIRED_OR_INACCURATE: "La position GPS est absente ou trop imprécise. Activez la localisation précise et réessayez.",
+    CENTRE_GPS_NOT_CONFIGURED: "La position GPS du centre n’est pas configurée. Contactez la Direction.",
     "Invalid login credentials": "Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe.",
   };
   const key = Object.keys(messages).find((item) => raw.includes(item));
@@ -306,7 +309,7 @@ export default function PresenceKioskPage() {
       const payload = await response.json();
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "KIOSK_REVOKE_FAILED");
       setOperatingDayStatus("closed");
-      setMessage("Fermeture administrative enregistrée. La borne n’est pas désactivée par cette action et suit toujours ses horaires automatiques.");
+      setMessage("Fermeture administrative enregistrée. La borne n’est pas désactivée par cette action et suit toujours ses horaires configurés.");
     } catch (error) {
       setMessage(errorMessage(error instanceof Error ? error.message : "Révocation impossible."));
     } finally {
@@ -445,10 +448,24 @@ export default function PresenceKioskPage() {
         const { data: sessionData } = await supabase.auth.getSession();
         const accessToken = sessionData.session?.access_token;
         if (!accessToken) throw new Error("AUTH_REQUIRED");
-        const gps = coords ? {
-          latitude: coords.coords.latitude,
-          longitude: coords.coords.longitude,
-          accuracy: coords.coords.accuracy,
+        const { data: gpsRequired, error: gpsModeError } = await supabase.rpc("attendance_gps_enabled");
+        if (gpsModeError) throw new Error(gpsModeError.message);
+        let verifiedCoords = coords;
+        if (gpsRequired === true && !verifiedCoords) {
+          if (!navigator.geolocation) throw new Error("GPS_REQUIRED");
+          setMessage("La Direction exige la localisation. Vérification de votre position…");
+          verifiedCoords = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(
+            resolve, () => reject(new Error("GPS_REQUIRED")),
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          ));
+        }
+        if (gpsRequired === true && (!verifiedCoords || !Number.isFinite(verifiedCoords.coords.accuracy) || verifiedCoords.coords.accuracy <= 0 || verifiedCoords.coords.accuracy > 100)) {
+          throw new Error("GPS_REQUIRED_OR_INACCURATE");
+        }
+        const gps = verifiedCoords ? {
+          latitude: verifiedCoords.coords.latitude,
+          longitude: verifiedCoords.coords.longitude,
+          accuracy: verifiedCoords.coords.accuracy,
         } : {};
         const response = await fetch("/api/presence/kiosk-checkin", {
           method: "POST",
@@ -470,8 +487,7 @@ export default function PresenceKioskPage() {
       }
     };
 
-    // Le GPS est facultatif : le pointage sur la borne QR enregistrée
-    // ne doit jamais demander la localisation ni bloquer si elle est refusée.
+    // Le serveur indique si le GPS est exigé. S’il est désactivé, aucune localisation n’est demandée.
     await submit();
   }
 
@@ -501,14 +517,14 @@ export default function PresenceKioskPage() {
         {!loading && user && canManageOperatingDay && (
           <div style={{ border: "1px solid #dce4ef", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 18 }}>Configuration de la borne</h2>
-            <p style={{ lineHeight: 1.5, color: "#52647a" }}>La borne de pointage est active automatiquement de 07 h 30 à 19 h 00, indépendamment de l’ouverture administrative. Les boutons ci-dessous servent uniquement à enregistrer l’ouverture et la fermeture d’Aéro Service. Chaque action est horodatée et signalée à la Direction; la fermeture administrative ne désactive pas la borne avant 19 h 00.</p>
+            <p style={{ lineHeight: 1.5, color: "#52647a" }}>La borne suit les horaires configurés dans WDESK Control Center, indépendamment de l’ouverture administrative. Les boutons ci-dessous servent uniquement à enregistrer l’ouverture et la fermeture d’Aéro Service. Chaque action est horodatée et signalée à la Direction; la fermeture administrative ne désactive pas la borne avant son heure de fermeture configurée.</p>
             {canConfigureLocation && <div style={{ border: "1px solid #dce4ef", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <strong>Zone GPS du centre</strong>
               <p style={{ margin: "6px 0 10px", color: "#52647a", lineHeight: 1.5, fontSize: 13 }}>Placez-vous physiquement à l’entrée du centre et enregistrez sa position GPS une seule fois. Elle est conservée dans la base et reste valable les jours suivants : ne recommencez pas chaque matin. Reconfigurez-la uniquement si la borne est déplacée ou si la position enregistrée est incorrecte. Zone autorisée : 100 mètres.</p>
               <button type="button" onClick={() => void configureCheckpointLocation()} disabled={busy} style={secondaryButton}>{busy ? "Enregistrement…" : "Enregistrer la position GPS du centre"}</button>
             </div>}
             {deviceRegistered ? (
-              <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée durablement sur cet appareil. Le pointage est disponible automatiquement de 07 h 30 à 19 h 00. Aucune nouvelle autorisation quotidienne du GPS n’est nécessaire.</p>
+              <p style={{ color: "#17663b", fontWeight: 700 }}>Borne enregistrée durablement sur cet appareil. Le pointage suit les horaires définis dans WDESK Control Center. Le GPS est appliqué uniquement si la Direction l’active.</p>
             ) : (
               <button type="button" onClick={() => void activateKiosk()} disabled={busy} style={primaryButton}>{busy ? "Enregistrement…" : "Enregistrer la borne sur cet appareil"}</button>
             )}
