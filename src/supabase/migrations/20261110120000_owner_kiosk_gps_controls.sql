@@ -193,7 +193,7 @@ begin
     $old$begin
   if v_uid is null then$old$,
     $new$begin
-  if not public.attendance_gps_enabled() then return public.request_qr_checkin() || jsonb_build_object('gps_required',false,'gps_verified',false); end if;
+  if not public.attendance_gps_enabled() then return public.request_qr_checkin_without_gps() || jsonb_build_object('gps_required',false,'gps_verified',false); end if;
   if v_uid is null then$new$);
   execute v_definition;
 
