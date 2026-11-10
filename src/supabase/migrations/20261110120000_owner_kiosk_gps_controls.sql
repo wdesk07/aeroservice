@@ -211,7 +211,7 @@ begin
     $old$begin
   if v_uid is null then$old$,
     $new$begin
-  if public.attendance_gps_enabled() and (p_lat is null or p_lng is null or p_accuracy_m is null or p_accuracy_m <= 0 or p_accuracy_m > 100) then raise exception 'GPS_REQUIRED'; end if;
+  if public.attendance_gps_enabled() and (p_lat is null or p_lng is null or p_lat not between -90 and 90 or p_lng not between -180 and 180 or p_accuracy_m is null or p_accuracy_m <= 0 or p_accuracy_m > 100) then raise exception 'GPS_REQUIRED'; end if;
   if not public.attendance_gps_enabled() then p_lat := null; p_lng := null; p_accuracy_m := null; end if;
   if v_uid is null then$new$);
   execute v_definition;
