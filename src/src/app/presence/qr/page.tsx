@@ -33,6 +33,10 @@ function friendlyError(raw: string) {
     ATTENDANCE_ALREADY_RECORDED: "Votre présence est déjà enregistrée pour cette séance.",
     SERVICE_UNAVAILABLE: "Le service est temporairement indisponible. Réessayez ou présentez-vous au secrétariat.",
     TOO_MANY_ATTEMPTS: "Trop de tentatives. Attendez quinze minutes avant de réessayer.",
+    GPS_REQUIRED: "La localisation est activée par la Direction. Autorisez le GPS et réessayez.",
+    GPS_ACCURACY_TOO_LOW: "La position est trop imprécise. Activez la localisation précise et réessayez.",
+    GPS_OUTSIDE_AUTHORIZED_ZONE: "Vous êtes hors de la zone GPS autorisée du centre.",
+    GPS_INVALID_OR_INACCURATE: "La localisation est invalide ou trop imprécise."
 
   };
   const key = Object.keys(messages).find((item) => raw.includes(item));
@@ -70,7 +74,27 @@ export default function MobileQrCheckinPage() {
       });
       if (sessionError || !sessionData.user) throw new Error("Connexion apprenant impossible.");
 
-      const { data, error: requestError } = await supabase.rpc("request_qr_checkin_without_gps");
+      const { data: gpsRequired, error: gpsModeError } = await supabase.rpc("attendance_gps_enabled");
+      if (gpsModeError) throw new Error(gpsModeError.message);
+      let data: any;
+      let requestError: any;
+      if (gpsRequired === true) {
+        if (!navigator.geolocation) throw new Error("GPS_REQUIRED");
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(
+          resolve, () => reject(new Error("GPS_REQUIRED")),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        ));
+        if (!Number.isFinite(position.coords.accuracy) || position.coords.accuracy <= 0 || position.coords.accuracy > 100) throw new Error("GPS_ACCURACY_TOO_LOW");
+        const response = await supabase.rpc("request_qr_checkin_with_gps", {
+          p_accuracy_m: position.coords.accuracy,
+          p_latitude: position.coords.latitude,
+          p_longitude: position.coords.longitude
+        });
+        data = response.data; requestError = response.error;
+      } else {
+        const response = await supabase.rpc("request_qr_checkin_without_gps");
+        data = response.data; requestError = response.error;
+      }
       await supabase.auth.signOut();
       setPassword("");
       if (requestError) throw new Error(requestError.message);
@@ -101,7 +125,7 @@ export default function MobileQrCheckinPage() {
         {!result ? (
           <>
             <div style={{ borderRadius: 12, background: "#edf4ff", padding: 14, lineHeight: 1.55, marginBottom: 18 }}>
-              Scannez le QR code officiel ou ouvrez directement cette page, puis identifiez-vous. Aucune géolocalisation n’est demandée. <strong>Votre présence ne sera définitive qu’après confirmation physique par le secrétariat.</strong>
+              Scannez le QR code officiel ou ouvrez directement cette page, puis identifiez-vous. La localisation est demandée uniquement si la Direction l’a activée. <strong>Votre présence ne sera définitive qu’après confirmation physique par le secrétariat.</strong>
             </div>
             <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
               <label style={labelStyle}>E-mail ou matricule apprenant
@@ -127,7 +151,7 @@ export default function MobileQrCheckinPage() {
         )}
 
         {error && <p role="alert" style={{ marginTop: 16, padding: 13, borderRadius: 10, background: "#fff0f0", color: "#8f2020", lineHeight: 1.5 }}>{error}</p>}
-        <p style={{ margin: "22px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.55 }}>Sécurité : le compte actif et la séance de formation sont vérifiés par le serveur. Sans géolocalisation, la confirmation physique par le secrétariat reste obligatoire avant l’accès au cours.</p>
+        <p style={{ margin: "22px 0 0", fontSize: 12, color: "#66778b", lineHeight: 1.55 }}>Sécurité : le compte actif et la séance de formation sont vérifiés par le serveur. Selon le réglage GPS du centre, la position peut être vérifiée. La confirmation physique par le secrétariat reste obligatoire avant l’accès au cours.</p>
       </section>
     </main>
   );
