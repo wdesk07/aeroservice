@@ -46,8 +46,8 @@ export default function LearnerQrScanPage() {
         setIsPersonnel(personnel);
         setState("ready");
         setMessage(personnel
-          ? "Compte du personnel reconnu. Scannez le QR officiel du centre ; votre présence sera enregistrée sans géolocalisation."
-          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. La confirmation physique par le secrétariat reste obligatoire.");
+          ? "Compte du personnel reconnu. Scannez le QR officiel du centre ; la localisation sera demandée uniquement si la Direction l’a activée."
+          : "Compte apprenant connecté. Scannez le QR officiel affiché au centre. La localisation dépend du réglage de la Direction ; la confirmation physique par le secrétariat reste obligatoire.");
       }
     }
     void checkSession();
@@ -91,8 +91,27 @@ export default function LearnerQrScanPage() {
         throw new Error("Ce n’est pas le QR officiel de pointage Aéro Service.");
       }
       setState("sending");
-      setMessage("QR reconnu. Vérification du compte et du pointage existant…");
-      const { data, error } = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_without_gps" : "request_qr_checkin_without_gps");
+      setMessage("QR reconnu. Vérification du compte, du réglage GPS et du pointage existant…");
+      const { data: gpsRequired, error: gpsModeError } = await supabase.rpc("attendance_gps_enabled");
+      if (gpsModeError) throw new Error(gpsModeError.message);
+      let data: any;
+      let error: any;
+      if (gpsRequired === true) {
+        if (!navigator.geolocation) throw new Error("GPS_REQUIRED");
+        setMessage("La Direction exige la localisation. Vérification de votre position…");
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(
+          resolve, () => reject(new Error("GPS_REQUIRED")),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        ));
+        if (!Number.isFinite(position.coords.accuracy) || position.coords.accuracy <= 0 || position.coords.accuracy > 100) throw new Error("GPS_INVALID_OR_INACCURATE");
+        const response = isPersonnel
+          ? await supabase.rpc("request_personnel_qr_checkin_with_gps", { p_latitude: position.coords.latitude, p_longitude: position.coords.longitude, p_accuracy_m: position.coords.accuracy })
+          : await supabase.rpc("request_qr_checkin_with_gps", { p_accuracy_m: position.coords.accuracy, p_latitude: position.coords.latitude, p_longitude: position.coords.longitude });
+        data = response.data; error = response.error;
+      } else {
+        const response = await supabase.rpc(isPersonnel ? "request_personnel_qr_checkin_without_gps" : "request_qr_checkin_without_gps");
+        data = response.data; error = response.error;
+      }
       if (error) throw new Error(error.message);
       if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
       setState("done");
