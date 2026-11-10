@@ -178,7 +178,7 @@ begin
   v_definition := replace(v_definition,
     $old$if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;$old$,
     $new$if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
-  if public.attendance_gps_enabled() then raise exception 'GPS_REQUIRED'; end if;$new$);
+  if public.attendance_gps_enabled() and coalesce(current_setting('app.gps_verified',true),'') <> 'true' then raise exception 'GPS_REQUIRED'; end if;$new$);
   execute v_definition;
 
   select pg_get_functiondef('public.request_personnel_qr_checkin_without_gps()'::regprocedure) into v_definition;
@@ -195,6 +195,7 @@ begin
     $new$begin
   if not public.attendance_gps_enabled() then return public.request_qr_checkin_without_gps() || jsonb_build_object('gps_required',false,'gps_verified',false); end if;
   if v_uid is null then$new$);
+  v_definition := replace(v_definition, 'v_result := public.request_qr_checkin();', 'perform set_config(''app.gps_verified'',''true'',true); v_result := public.request_qr_checkin_without_gps();');
   execute v_definition;
 
   select pg_get_functiondef('public.request_personnel_qr_checkin_with_gps(numeric,numeric,numeric)'::regprocedure) into v_definition;
