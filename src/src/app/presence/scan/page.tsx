@@ -116,9 +116,16 @@ export default function LearnerQrScanPage() {
       if (!data?.ok) throw new Error(data?.error || "Le serveur n’a pas confirmé la demande.");
       setState("done");
       const status = String(data.status || "").toLowerCase();
-      const delay = Number(data.delay_minutes || 0);
-      const late = isPersonnel ? status === "late" || delay > 0 : Boolean(data.late) || status === "late" || delay > 15;
-      setResultStatus(late ? "late" : "on_time");
+      const hasDelay = data.delay_minutes !== null && data.delay_minutes !== undefined && Number.isFinite(Number(data.delay_minutes));
+      const delay = hasDelay ? Number(data.delay_minutes) : null;
+      const late = isPersonnel
+        ? status === "late" || (hasDelay && delay! > 0)
+        : data.late === true || status === "late" || (hasDelay && delay! > 15);
+      const onTime = isPersonnel
+        ? status === "on_time" || (hasDelay && delay === 0)
+        : data.late === false || status === "on_time" || (hasDelay && delay! <= 15);
+      const confirmedStatus = late ? "late" : onTime ? "on_time" : null;
+      setResultStatus(confirmedStatus);
       const arrived = data.arrived_at
         ? new Date(data.arrived_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })
         : data.requested_at
@@ -130,20 +137,22 @@ export default function LearnerQrScanPage() {
           ? "POINTAGE DÉJÀ ENREGISTRÉ — "
           : late ? "EN RETARD — " : "PRÉSENCE DU PERSONNEL CONFIRMÉE — ";
         setMessage(attendanceText + "Votre présence du personnel est enregistrée" + (arrived ? " à " + arrived : "") + "." +
-          (late ? " Retard calculé : " + delay + " minute(s)." : " Vous êtes arrivé à l’heure.") +
+          (late ? " Retard calculé : " + (delay ?? "non précisé") + " minute(s)." : onTime ? " Vous êtes arrivé à l’heure." : " Statut horaire non confirmé par le serveur ; aucune confirmation « à l’heure » n’est affichée.") +
           (penalty > 0 ? " Pénalité automatique : " + penalty.toLocaleString("fr-FR") + " FCFA." : "") +
           " Ce résultat concerne votre présence professionnelle, pas un accès à un cours.");
       } else if (data.already_confirmed) {
         setMessage("PRÉSENCE DÉJÀ CONFIRMÉE — Votre pointage initial" + (arrived ? " de " + arrived : "") +
-          " est déjà enregistré. " + (late ? "Le statut initial reste : retard de " + delay + " minute(s)." : "Le statut initial est : à l’heure.") +
+          " est déjà enregistré. " + (late ? "Le statut initial reste : retard de " + (delay ?? "non précisé") + " minute(s)." : onTime ? "Le statut initial est : à l’heure." : "Le statut horaire initial doit être vérifié au secrétariat.") +
           (data.access_blocked ? " Votre accès reste soumis à la situation de régularisation enregistrée auprès du secrétariat." : " Aucun nouveau pointage n’a été créé. Ce scan n’a rien modifié."));
       } else if (data.duplicate) {
         setMessage("DEMANDE DÉJÀ ENVOYÉE — Votre demande initiale" + (arrived ? " de " + arrived : "") +
           " est toujours en attente de confirmation physique par le secrétariat. Aucun nouveau pointage ni nouveau retard n’a été créé.");
       } else {
         setMessage(late
-          ? "RETARD SIGNALÉ — " + delay + " minute(s). Votre demande a été envoyée et reste en attente de confirmation physique par le secrétariat. Le scan seul ne donne pas accès au cours."
-          : "DEMANDE ENVOYÉE — À L’HEURE. Présentez-vous au secrétariat pour la confirmation physique obligatoire avant l’accès au cours.");
+          ? "RETARD SIGNALÉ — " + (delay ?? "non précisé") + " minute(s). Votre demande a été envoyée et reste en attente de confirmation physique par le secrétariat. Le scan seul ne donne pas accès au cours."
+          : onTime
+            ? "DEMANDE ENVOYÉE — À L’HEURE. Présentez-vous au secrétariat pour la confirmation physique obligatoire avant l’accès au cours."
+            : "DEMANDE ENVOYÉE — STATUT HORAIRE À VÉRIFIER. Le serveur n’a pas fourni les éléments nécessaires pour confirmer « à l’heure ». Présentez-vous au secrétariat.");
       }
     } catch (error) {
       setState("error");
