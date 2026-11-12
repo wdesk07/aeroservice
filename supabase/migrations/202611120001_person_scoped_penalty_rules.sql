@@ -380,7 +380,8 @@ BEGIN
         priority=coalesce((p_payload->>'priority')::integer,100),
         formation_id=nullif(p_payload->>'formation_id','')::uuid,
         blocks_access=coalesce((p_payload->>'blocks_access')::boolean,false),
-        active=(v_status='true')
+        active=(v_status='true'),
+        effective_until=CASE WHEN v_status='true' THEN NULL ELSE effective_until END
       WHERE id=v_id RETURNING to_jsonb(public.penalty_rules.*) INTO v_new;
     ELSE
       INSERT INTO public.penalty_rules(
