@@ -67,7 +67,6 @@ export default function DirectorFinancesPage() {
     const groupById = new Map(groups.map((group) => [group.id, group]));
     const result = new Map<string, Summary>();
     for (const penalty of penalties) {
-      if (penalty.status.toLowerCase() === "cancelled") continue;
       const student = studentById.get(penalty.person_id);
       const group = student?.group_id ? groupById.get(student.group_id) : null;
       const formationId = student?.formation_id ?? group?.formation_id ?? null;
@@ -93,7 +92,7 @@ export default function DirectorFinancesPage() {
     const studentById = new Map(students.map((student) => [student.id, student]));
     const groupById = new Map(groups.map((group) => [group.id, group]));
     const formationById = new Map(formations.map((formation) => [formation.id, formation]));
-    return penalties.filter((penalty) => penalty.status.toLowerCase() !== "cancelled").map((penalty) => {
+    return penalties.map((penalty) => {
       const student = studentById.get(penalty.person_id);
       const group = student?.group_id ? groupById.get(student.group_id) : null;
       const formationId = student?.formation_id ?? group?.formation_id ?? null;
