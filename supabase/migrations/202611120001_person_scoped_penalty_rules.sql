@@ -416,8 +416,8 @@ BEGIN
     IF v_old IS NULL THEN RAISE EXCEPTION 'PENALTY_NOT_FOUND'; END IF;
     IF coalesce(v_old->>'status','') <> 'pending' THEN RAISE EXCEPTION 'ONLY_PENDING_PENALTIES_CAN_BE_CANCELLED'; END IF;
     IF EXISTS(SELECT 1 FROM public.payments pm WHERE pm.penalty_id=v_id) THEN RAISE EXCEPTION 'PENALTY_HAS_PAYMENT_HISTORY'; END IF;
-    UPDATE public.penalties SET status='cancelled',cancelled_reason=left(trim(p_reason),500)
-      WHERE id=v_id RETURNING to_jsonb(public.penalties.*) INTO v_new;
+    DELETE FROM public.penalties WHERE id=v_id
+      RETURNING to_jsonb(public.penalties.*) INTO v_new;
   END IF;
 
   INSERT INTO public.audit_logs(actor_id,action,module,entity_type,entity_id,old_values,new_values,visibility)
