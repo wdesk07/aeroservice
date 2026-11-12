@@ -431,3 +431,5 @@ $function$;
 REVOKE ALL ON FUNCTION public.wdesk_owner_penalty_mutation(uuid,text,jsonb,text,uuid) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.wdesk_owner_penalty_mutation(uuid,text,jsonb,text,uuid) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
